@@ -22,6 +22,7 @@ include = [
     "assets/datasets/iris.csv",
     "assets/fonts/IosevkaGorbie/IosevkaGorbie-Regular.ttf",
     "assets/fonts/IosevkaGorbie/IosevkaGorbie-Bold.ttf",
+    "assets/fonts/IosevkaGorbie/OFL.txt",
     "assets/fonts/Jersey_15/Jersey15-Regular.ttf",
     "assets/fonts/Jersey_15/OFL.txt",
     "assets/fonts/NewComputerModern/NewCMMath-Regular.otf",
