@@ -2,6 +2,12 @@
 
 # GORBIE! - A Minimalist Notebook Environment for Rust
 
+GORBIE continues as **[Lissajous](https://lissajous.science)**. New development
+lives in the [`lissajous` crate](https://crates.io/crates/lissajous) and the
+[erlkonig-ai/lissajous repository](https://github.com/erlkonig-ai/lissajous).
+Gorbie remains the mascot. This final GORBIE release changes only the package
+version, description, and this notice; its code is unchanged from 0.18.1.
+
 Every other notebook environment tries to make notebooks easier, we try to make them simpler.
 
 ![GORBIE screenshot](https://github.com/triblespace/GORBIE/blob/main/assets/screenshot.png?raw=true)

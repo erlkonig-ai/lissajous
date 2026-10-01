@@ -1,7 +1,7 @@
 [package]
 name = "GORBIE"
-description = "GORBIE! Is a minimalist notebook library for Rust."
-version = "0.18.1"
+description = "Deprecated name: GORBIE continues as lissajous, a minimalist notebook library for Rust."
+version = "0.18.2"
 edition = "2021"
 authors = ["Jan-Paul Bultmann <jp@bultmann.eu>"]
 license = "MIT OR Apache-2.0"
@@ -172,4 +172,3 @@ required-features = ["triblespace"]
 [[example]]
 name = "wiki_viewer"
 required-features = ["triblespace", "typst", "cubecl"]
-
