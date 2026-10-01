@@ -1,17 +1,17 @@
 #!/usr/bin/env -S watchexec -r rust-script
 //! ```cargo
 //! [dependencies]
-//! GORBIE = { path = ".." }
+//! lissajous = { path = ".." }
 //! egui = "0.33"
 //! egui-theme-switch = "0.4"
 //! ```
 
 use egui::Color32;
 use egui::{self};
-use GORBIE::md;
-use GORBIE::notebook;
-use GORBIE::widgets;
-use GORBIE::NotebookCtx;
+use lissajous::md;
+use lissajous::notebook;
+use lissajous::widgets;
+use lissajous::NotebookCtx;
 
 fn to_hex(c: Color32) -> String {
     let r = c.r();
@@ -21,7 +21,7 @@ fn to_hex(c: Color32) -> String {
 }
 
 fn ral_lookup(code: u16) -> Option<(&'static str, Color32)> {
-    GORBIE::themes::ral::RAL_COLORS
+    lissajous::themes::ral::RAL_COLORS
         .iter()
         .find(|(num, _, _)| *num == code)
         .map(|(_, name, color)| (*name, *color))
@@ -30,7 +30,7 @@ fn ral_lookup(code: u16) -> Option<(&'static str, Color32)> {
 fn ral_codes() -> &'static [u16] {
     static CODES: std::sync::OnceLock<Vec<u16>> = std::sync::OnceLock::new();
     CODES.get_or_init(|| {
-        let mut codes: Vec<u16> = GORBIE::themes::ral::RAL_COLORS
+        let mut codes: Vec<u16> = lissajous::themes::ral::RAL_COLORS
             .iter()
             .map(|(code, _, _)| *code)
             .collect();
@@ -86,7 +86,7 @@ fn closest_ral_code(current: u16, proposed: u16) -> u16 {
 
 fn closest_ral_from_rgb(rgb: [u8; 3]) -> u16 {
     let (r, g, b) = (rgb[0] as i32, rgb[1] as i32, rgb[2] as i32);
-    GORBIE::themes::ral::RAL_COLORS
+    lissajous::themes::ral::RAL_COLORS
         .iter()
         .map(|(code, _, color)| {
             let dr = r - color.r() as i32;
@@ -291,9 +291,9 @@ fn rgb_histogram_editor(ui: &mut egui::Ui, rgb: &mut [u8; 3]) -> RgbHistogramEdi
     }
 
     let channel_colors = [
-        GORBIE::themes::ral(3020),
-        GORBIE::themes::ral(6024),
-        GORBIE::themes::ral(5005),
+        lissajous::themes::ral(3020),
+        lissajous::themes::ral(6024),
+        lissajous::themes::ral(5005),
     ];
     let channel_names = ["R", "G", "B"];
 
@@ -408,7 +408,7 @@ struct PaletteState {
 
 impl Default for PaletteState {
     fn default() -> Self {
-        let color = GORBIE::themes::ral(7047);
+        let color = lissajous::themes::ral(7047);
         Self {
             ral_code: 7047_u16,
             rgb: [color.r(), color.g(), color.b()],
@@ -472,7 +472,7 @@ impl Default for FocusTarget {
 
 #[notebook]
 fn main(nb: &mut NotebookCtx) {
-    let padding = GORBIE::cards::DEFAULT_CARD_PADDING;
+    let padding = lissajous::cards::DEFAULT_CARD_PADDING;
     nb.view(move |ctx| {
         // Introduction
         md!(
@@ -483,13 +483,13 @@ fn main(nb: &mut NotebookCtx) {
 
     nb.view(move |ctx| {
         ctx.with_padding(padding, |ctx| {
-            let light_foreground = GORBIE::themes::ral(9011);
-            let light_background = GORBIE::themes::ral(7047);
-            let light_surface = GORBIE::themes::ral(7047);
+            let light_foreground = lissajous::themes::ral(9011);
+            let light_background = lissajous::themes::ral(7047);
+            let light_surface = lissajous::themes::ral(7047);
 
-            let dark_foreground = GORBIE::themes::ral(9003);
-            let dark_background = GORBIE::themes::ral(7046);
-            let dark_surface = GORBIE::themes::ral(7047);
+            let dark_foreground = lissajous::themes::ral(9003);
+            let dark_background = lissajous::themes::ral(7046);
+            let dark_surface = lissajous::themes::ral(7047);
 
             // Derived samples (same rules used in `themes::industrial`)
             let light_surface_muted = blend(light_surface, light_background, 0.2);
@@ -782,9 +782,9 @@ fn main(nb: &mut NotebookCtx) {
                     .scale_percent(),
             );
 
-            let green = GORBIE::themes::ral(6024);
-            let yellow = GORBIE::themes::ral(1023);
-            let red = GORBIE::themes::ral(3020);
+            let green = lissajous::themes::ral(6024);
+            let yellow = lissajous::themes::ral(1023);
+            let red = lissajous::themes::ral(3020);
 
             ctx.add(
                 widgets::ProgressBar::new(progress)

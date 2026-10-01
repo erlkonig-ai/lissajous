@@ -4,6 +4,20 @@ All notable changes to this project will be documented in this file.
 
 ## Unreleased
 
+## 0.19.0 - 2026-10-01
+
+- **Lissajous.** The notebook library is now the `lissajous` crate, hosted at
+  `erlkonig-ai/lissajous` with homepage <https://lissajous.science>. Gorbie
+  remains the mascot; existing style names, fonts, editor environment variable
+  and capture defaults are unchanged. Consumers can retain their Rust import
+  name with `GORBIE = { package = "lissajous", version = "0.19" }`; notebook
+  macros resolve the Cargo dependency alias rather than a hardcoded crate name.
+- **Breaking API release.** Removed branch/head widgets and the old gloss
+  surface are not compatibility shims. Optional TribleSpace integration uses
+  0.47.0. The renamed `lissajous-macros` starts at 0.10.0 with this release:
+  its generated headless-theme code targets this API and is not a compatible update for
+  consumers pairing GORBIE 0.18 with the 0.9 macro line.
+
 - **Read-only physics views.** `PhysicsScene` and `PhysicsView` display owned
   3D wireframes/particles with orbit, pan, zoom, stable bounds and fit/reset.
   Optional `rapier` and `salva` adapters capture real f64 collider transforms

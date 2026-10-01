@@ -242,7 +242,7 @@ impl Default for TableScrollOptions {
 /// ### Example
 /// ```
 /// # egui::__run_test_ui(|ui| {
-/// use GORBIE::widgets::{TableBuilder, Column};
+/// use lissajous::widgets::{TableBuilder, Column};
 /// TableBuilder::new(ui)
 ///     .column(Column::auto().resizable(true))
 ///     .column(Column::remainder())
@@ -1403,7 +1403,7 @@ impl<'a> TableBody<'a> {
     /// ### Example
     /// ```
     /// # egui::__run_test_ui(|ui| {
-    /// use GORBIE::widgets::{TableBuilder, Column};
+    /// use lissajous::widgets::{TableBuilder, Column};
     /// TableBuilder::new(ui)
     ///     .column(Column::remainder().at_least(100.0))
     ///     .body(|mut body| {
@@ -1487,7 +1487,7 @@ impl<'a> TableBody<'a> {
     /// ### Example
     /// ```
     /// # egui::__run_test_ui(|ui| {
-    /// use GORBIE::widgets::{TableBuilder, Column};
+    /// use lissajous::widgets::{TableBuilder, Column};
     /// TableBuilder::new(ui)
     ///     .column(Column::remainder().at_least(100.0))
     ///     .body(|mut body| {

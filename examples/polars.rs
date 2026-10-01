@@ -1,7 +1,7 @@
 #!/usr/bin/env -S watchexec -r rust-script
 //! ```cargo
 //! [dependencies]
-//! GORBIE = { path = "..", features = ["polars"] }
+//! lissajous = { path = "..", features = ["polars"] }
 //! egui = "0.33"
 //! polars = "0.50.0"
 //! parking_lot = "0.12.3"
@@ -9,17 +9,17 @@
 
 use egui::Margin;
 use polars::prelude::*;
-use GORBIE::dataflow::ComputedState;
-use GORBIE::md;
-use GORBIE::notebook;
-use GORBIE::widgets::{
+use lissajous::dataflow::ComputedState;
+use lissajous::md;
+use lissajous::notebook;
+use lissajous::widgets::{
     data_export_tiny, data_summary_tiny, dataframe, dataframe_summary, load_auto,
 };
-use GORBIE::NotebookCtx;
+use lissajous::NotebookCtx;
 
 #[notebook]
 fn main(nb: &mut NotebookCtx) {
-    let padding = GORBIE::cards::DEFAULT_CARD_PADDING;
+    let padding = lissajous::cards::DEFAULT_CARD_PADDING;
     let summary_padding = padding;
     let dataframe_padding = Margin {
         left: padding.left,

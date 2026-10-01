@@ -46,8 +46,8 @@ pub mod widgets;
 
 #[cfg(not(target_arch = "wasm32"))]
 pub use capture::{CaptureOptions, CaptureResult, CapturedPng};
-pub use gorbie_macros::__gorbie_web_export;
-pub use gorbie_macros::notebook;
+pub use lissajous_macros::__gorbie_web_export;
+pub use lissajous_macros::notebook;
 
 use crate::themes::industrial_dark;
 use crate::themes::industrial_fonts;

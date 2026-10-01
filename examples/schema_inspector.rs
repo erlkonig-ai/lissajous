@@ -1,7 +1,7 @@
 #!/usr/bin/env -S watchexec -r rust-script
 //! ```cargo
 //! [dependencies]
-//! GORBIE = { path = "..", features = ["triblespace"] }
+//! lissajous = { path = "..", features = ["triblespace"] }
 //! egui = "0.34"
 //! triblespace = { path = "../../triblespace-rs" }
 //! ```
@@ -35,7 +35,7 @@ use triblespace::core::trible::{Fragment, TribleSet};
 use triblespace::macros::{find, pattern};
 use triblespace::prelude::View;
 
-use GORBIE::prelude::*;
+use lissajous::prelude::*;
 
 fn build_schema_metadata() -> Fragment {
     let mut metadata = Fragment::empty();
@@ -161,7 +161,7 @@ fn render_schema_sections(
 
 #[notebook]
 fn main(nb: &mut NotebookCtx) {
-    let padding = GORBIE::cards::DEFAULT_CARD_PADDING;
+    let padding = lissajous::cards::DEFAULT_CARD_PADDING;
     let mut metadata = build_schema_metadata();
     let reader = metadata.blobs_mut().reader().expect("metadata blob reader");
     let metadata_set = metadata.into_facts();

@@ -1,7 +1,7 @@
 #!/usr/bin/env -S watchexec -r rust-script
 //! ```cargo
 //! [dependencies]
-//! GORBIE = { path = "..", features = ["triblespace"] }
+//! lissajous = { path = "..", features = ["triblespace"] }
 //! egui = "0.34"
 //! eframe = "0.34"
 //! triblespace = { path = "../../triblespace-rs", features = ["wasm"] }
@@ -22,8 +22,8 @@ use triblespace::prelude::blobencodings::UTF8String;
 use triblespace::prelude::inlineencodings::{GenId, ShortString, R256};
 use triblespace::prelude::{entity, MetaDescribe, TribleSet, View};
 
-use GORBIE::prelude::*;
-use GORBIE::widgets::triblespace::{id_short, EntityInspectorWidget};
+use lissajous::prelude::*;
+use lissajous::widgets::triblespace::{id_short, EntityInspectorWidget};
 
 mod demo {
     use triblespace::prelude::*;
@@ -305,7 +305,7 @@ impl Default for InspectorState {
 
 #[notebook]
 fn main(nb: &mut NotebookCtx) {
-    let padding = GORBIE::cards::DEFAULT_CARD_PADDING;
+    let padding = lissajous::cards::DEFAULT_CARD_PADDING;
     nb.view(move |ui| {
         md!(
             ui,

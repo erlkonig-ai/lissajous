@@ -1,7 +1,7 @@
 #!/usr/bin/env -S watchexec -r rust-script
 //! ```cargo
 //! [dependencies]
-//! GORBIE = { path = "..", features = ["triblespace"] }
+//! lissajous = { path = "..", features = ["triblespace"] }
 //! ed25519-dalek = "2.1"
 //! pollster = "0.4"
 //! tempfile = "3.26"
@@ -31,8 +31,8 @@ use triblespace::core::repo::pile::{Pile, PileSnapshot};
 use triblespace::core::repo::{StoreChanges, StoreSnapshot};
 use triblespace::prelude::*;
 
-use GORBIE::cards::DEFAULT_CARD_PADDING;
-use GORBIE::prelude::*;
+use lissajous::cards::DEFAULT_CARD_PADDING;
+use lissajous::prelude::*;
 
 const POLL_INTERVAL: Duration = Duration::from_millis(100);
 const MORE_TITLES: [&str; 4] = [

@@ -1,18 +1,18 @@
 #!/usr/bin/env -S watchexec -r rust-script
 //! ```cargo
 //! [dependencies]
-//! GORBIE = { path = ".." }
+//! lissajous = { path = ".." }
 //! egui = "0.33"
 //! ```
 
-use GORBIE::md;
-use GORBIE::notebook;
-use GORBIE::widgets;
-use GORBIE::NotebookCtx;
+use lissajous::md;
+use lissajous::notebook;
+use lissajous::widgets;
+use lissajous::NotebookCtx;
 
 #[notebook]
 fn main(nb: &mut NotebookCtx) {
-    let padding = GORBIE::cards::DEFAULT_CARD_PADDING;
+    let padding = lissajous::cards::DEFAULT_CARD_PADDING;
     nb.view(|ctx| {
         md!(
             ctx,

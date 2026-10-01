@@ -1,17 +1,17 @@
-# Gorbie Widgets
+# Lissajous Widgets
 
 ## Feature flags
 
 To keep the default build light, some widgets are feature-gated:
 - `markdown`: rich Markdown rendering for `md!` and `note!` (default).
-- `polars`: `GORBIE::widgets::dataframe` (Polars + GORBIE table).
-- `triblespace`: Triblespace widgets under `GORBIE::widgets::triblespace`.
+- `polars`: `lissajous::widgets::dataframe` (Polars + Lissajous table).
+- `triblespace`: Triblespace widgets under `lissajous::widgets::triblespace`.
 - `cubecl`: GPU simulated-annealing ordering for the entity inspector (use with `triblespace`).
 
 Without `markdown`, `md!` and `note!` are unavailable. Disable defaults with
 `default-features = false`.
 
-`md!` renders Markdown inside a padded card. Use `GORBIE::widgets::markdown`
+`md!` renders Markdown inside a padded card. Use `lissajous::widgets::markdown`
 when you want inline Markdown without padding.
 
 ## Sections and grids
@@ -50,7 +50,7 @@ Two rules follow from what a section and a card are:
 
 ## Text fields
 
-`GORBIE::widgets::TextField` supports `rows()` to set the minimum visible height
+`lissajous::widgets::TextField` supports `rows()` to set the minimum visible height
 for multiline inputs and `max_rows()` to cap it. When `max_rows` is set, extra
 lines are clipped rather than expanding the widget.
 
@@ -83,7 +83,7 @@ See `examples/physics_widgets.rs` and the README for feature commands and limits
 
 ## Triblespace entity inspector
 
-`GORBIE::widgets::triblespace::EntityInspectorWidget` renders an entity graph from a
+`lissajous::widgets::triblespace::EntityInspectorWidget` renders an entity graph from a
 data `TribleSet` and uses a metadata `TribleSet` for attribute labels and value
 formatters. Pass both sets, a `BlobCache` for `UTF8String` attribute names, a
 `BlobCache` for `WasmCode` value formatters, and a mutable selection `Id`. The

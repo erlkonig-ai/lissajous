@@ -64,7 +64,7 @@ fn section_default_open_id() -> egui::Id {
 ///
 /// ```ignore
 /// // Start every section collapsed for a dashboard-style notebook:
-/// GORBIE::card_ctx::set_default_section_open(ui.ctx(), false);
+/// lissajous::card_ctx::set_default_section_open(ui.ctx(), false);
 /// ```
 pub fn set_default_section_open(ctx: &egui::Context, open: bool) {
     ctx.data_mut(|d| d.insert_temp(section_default_open_id(), open));

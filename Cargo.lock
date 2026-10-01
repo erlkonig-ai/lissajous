@@ -3,47 +3,6 @@
 version = 4
 
 [[package]]
-name = "GORBIE"
-version = "0.18.1"
-dependencies = [
- "bytemuck",
- "comemo",
- "ctrlc",
- "cubecl",
- "dark-light",
- "earcutr",
- "ed25519-dalek 2.2.0",
- "eframe",
- "egui 0.34.2",
- "egui-wgpu",
- "egui_graphs",
- "egui_plot",
- "glam 0.30.10",
- "gorbie-commonmark",
- "gorbie-macros",
- "hifitime",
- "log",
- "parking_lot",
- "petgraph",
- "png 0.18.1",
- "polars",
- "pollster",
- "rand_core 0.9.5",
- "rapier3d-f64",
- "salva3d-f64",
- "tempfile",
- "tracing",
- "triblespace",
- "triblespace-net",
- "ttf-parser",
- "typst",
- "typst-syntax",
- "wasm-bindgen",
- "wasm-bindgen-futures",
- "web-sys",
-]
-
-[[package]]
 name = "ab_glyph"
 version = "0.2.32"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -296,9 +255,7 @@ dependencies = [
 
 [[package]]
 name = "anybytes"
-version = "0.20.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "cada9ef8ee94f698de87e120c8574581f3bba30310c50f408744575d3af4dfe9"
+version = "0.20.3"
 dependencies = [
  "bytes",
  "memmap2",
@@ -1627,20 +1584,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "cubecl"
-version = "0.10.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "fd203fef6e359472e4cb8f6c0ef3eca062815a1edd560eb6d6c1d5c1397838d9"
-dependencies = [
- "cubecl-core",
- "cubecl-cuda",
- "cubecl-ir",
- "cubecl-runtime",
- "cubecl-wgpu",
- "half",
-]
-
-[[package]]
 name = "cubecl-common"
 version = "0.10.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1681,68 +1624,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "cubecl-core"
-version = "0.10.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a7522e7acf25d7848032c7b5270780f9f2abe84e13c7ed6345aa27ba70c312ca"
-dependencies = [
- "bitflags 2.11.0",
- "bytemuck",
- "cubecl-common",
- "cubecl-ir",
- "cubecl-macros",
- "cubecl-runtime",
- "cubecl-zspace",
- "derive-new",
- "derive_more",
- "enumset",
- "float-ord",
- "half",
- "hashbrown 0.16.1",
- "log",
- "num-traits",
- "paste",
- "serde",
- "serde_json",
- "variadics_please",
-]
-
-[[package]]
-name = "cubecl-cpp"
-version = "0.10.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "411af04828cbf4583ecd388579fb30cd7a644eec19a334bb8f0d9d08522e1458"
-dependencies = [
- "bytemuck",
- "cubecl-common",
- "cubecl-core",
- "cubecl-opt",
- "cubecl-runtime",
- "derive-new",
- "half",
- "itertools 0.14.0",
- "log",
-]
-
-[[package]]
-name = "cubecl-cuda"
-version = "0.10.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b6b0a69ff45688d322ad8e92c8bf645167b9ca490fa8fa087fc6adac8c5e46be"
-dependencies = [
- "bytemuck",
- "cubecl-common",
- "cubecl-core",
- "cubecl-cpp",
- "cubecl-runtime",
- "cudarc",
- "derive-new",
- "half",
- "log",
- "serde",
-]
-
-[[package]]
 name = "cubecl-ir"
 version = "0.10.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1765,23 +1646,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "cubecl-macros"
-version = "0.10.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "77aa6df563e8e6a0926d2e9eeacb968737940a0e1ae9be819f6a65a341006e12"
-dependencies = [
- "cubecl-common",
- "darling 0.23.0",
- "derive-new",
- "ident_case",
- "inflections",
- "prettyplease",
- "proc-macro2",
- "quote",
- "syn 2.0.117",
-]
-
-[[package]]
 name = "cubecl-macros-internal"
 version = "0.10.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1791,78 +1655,6 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn 2.0.117",
-]
-
-[[package]]
-name = "cubecl-opt"
-version = "0.10.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0a599c6c3efefdcee8636994c90e58ef696c7efbed2d18b5b5ad8d5f29923abb"
-dependencies = [
- "cubecl-common",
- "cubecl-core",
- "cubecl-ir",
- "float-ord",
- "log",
- "num",
- "petgraph",
- "smallvec",
- "stable-vec",
- "type-map",
-]
-
-[[package]]
-name = "cubecl-runtime"
-version = "0.10.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b68491bf5b3e997ae36bdc4e63b4ccd6d2f0e86b3b596a5d7a48d2b9e92622a0"
-dependencies = [
- "ahash",
- "async-channel 2.5.0",
- "bytemuck",
- "cfg-if",
- "cfg_aliases",
- "cubecl-common",
- "cubecl-ir",
- "cubecl-zspace",
- "derive-new",
- "derive_more",
- "dirs",
- "enumset",
- "hashbrown 0.16.1",
- "log",
- "md5",
- "serde",
- "serde_json",
- "spin 0.10.0",
- "thiserror 2.0.18",
- "toml 1.1.2+spec-1.1.0",
- "wasm-bindgen-futures",
- "web-time",
-]
-
-[[package]]
-name = "cubecl-wgpu"
-version = "0.10.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4d3663c6e1a86187172b2cee495b6b533e7d91a2cb37e26f421649e315fe4c3a"
-dependencies = [
- "async-channel 2.5.0",
- "bytemuck",
- "cfg-if",
- "cfg_aliases",
- "cubecl-common",
- "cubecl-core",
- "cubecl-ir",
- "cubecl-runtime",
- "derive-new",
- "derive_more",
- "half",
- "hashbrown 0.16.1",
- "log",
- "sanitize-filename",
- "wasm-bindgen-futures",
- "wgpu",
 ]
 
 [[package]]
@@ -3622,16 +3414,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "gorbie-macros"
-version = "0.9.0"
-dependencies = [
- "proc-macro-crate",
- "proc-macro2",
- "quote",
- "syn 2.0.117",
-]
-
-[[package]]
 name = "gpu-allocator"
 version = "0.28.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4633,33 +4415,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "iroh-gossip"
-version = "0.101.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4e1dc4b05f73e7a1b9e83b531eb63c3fd671b0af3aeb13b59c546dd7ca747515"
-dependencies = [
- "blake3",
- "bytes",
- "data-encoding",
- "derive_more",
- "futures-concurrency",
- "hex",
- "indexmap",
- "iroh",
- "iroh-base",
- "iroh-metrics",
- "irpc",
- "n0-error",
- "n0-future",
- "postcard",
- "rand 0.10.2",
- "serde",
- "tokio",
- "tokio-util",
- "tracing",
-]
-
-[[package]]
 name = "iroh-mdns-address-lookup"
 version = "0.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4806,11 +4561,10 @@ checksum = "92ecc6618181def0457392ccd0ee51198e065e016d1d527a7ac1b6dc7c1f09d2"
 
 [[package]]
 name = "jerky"
-version = "0.9.0"
-source = "git+https://github.com/triblespace/jerky.git?rev=a03b927dc9d1fac0e6085f1275cd8f8504c36648#a03b927dc9d1fac0e6085f1275cd8f8504c36648"
+version = "0.10.0"
 dependencies = [
  "anybytes",
- "cubecl",
+ "maryml-cubecl",
  "num-traits",
  "zerocopy",
 ]
@@ -5107,6 +4861,57 @@ dependencies = [
 ]
 
 [[package]]
+name = "lissajous"
+version = "0.19.0"
+dependencies = [
+ "bytemuck",
+ "comemo",
+ "ctrlc",
+ "dark-light",
+ "earcutr",
+ "ed25519-dalek 2.2.0",
+ "eframe",
+ "egui 0.34.2",
+ "egui-wgpu",
+ "egui_graphs",
+ "egui_plot",
+ "glam 0.30.10",
+ "gorbie-commonmark",
+ "hifitime",
+ "lissajous-macros",
+ "log",
+ "maryml-cubecl",
+ "parking_lot",
+ "petgraph",
+ "png 0.18.1",
+ "polars",
+ "pollster",
+ "rand_core 0.9.5",
+ "rapier3d-f64",
+ "salva3d-f64",
+ "tempfile",
+ "tracing",
+ "triblespace",
+ "triblespace-net",
+ "ttf-parser",
+ "typst",
+ "typst-syntax",
+ "wasm-bindgen",
+ "wasm-bindgen-futures",
+ "web-sys",
+]
+
+[[package]]
+name = "lissajous-macros"
+version = "0.10.0"
+dependencies = [
+ "proc-macro-crate",
+ "proc-macro2",
+ "quote",
+ "syn 2.0.117",
+]
+
+[[package]]
 name = "litemap"
 version = "0.7.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5197,6 +5002,157 @@ name = "mac-addr"
 version = "0.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d3d25b0e0b648a86960ac23b7ad4abb9717601dec6f66c165f5b037f3f03065f"
+
+[[package]]
+name = "maryml-cubecl"
+version = "0.10.0"
+dependencies = [
+ "cubecl-ir",
+ "half",
+ "maryml-cubecl-core",
+ "maryml-cubecl-cuda",
+ "maryml-cubecl-runtime",
+ "maryml-cubecl-wgpu",
+]
+
+[[package]]
+name = "maryml-cubecl-core"
+version = "0.10.0"
+dependencies = [
+ "bitflags 2.11.0",
+ "bytemuck",
+ "cubecl-common",
+ "cubecl-ir",
+ "cubecl-zspace",
+ "derive-new",
+ "derive_more",
+ "enumset",
+ "float-ord",
+ "half",
+ "hashbrown 0.16.1",
+ "log",
+ "maryml-cubecl-macros",
+ "maryml-cubecl-runtime",
+ "num-traits",
+ "paste",
+ "serde",
+ "serde_json",
+ "variadics_please",
+]
+
+[[package]]
+name = "maryml-cubecl-cpp"
+version = "0.10.0"
+dependencies = [
+ "bytemuck",
+ "cubecl-common",
+ "derive-new",
+ "half",
+ "itertools 0.14.0",
+ "log",
+ "maryml-cubecl-core",
+ "maryml-cubecl-opt",
+ "maryml-cubecl-runtime",
+]
+
+[[package]]
+name = "maryml-cubecl-cuda"
+version = "0.10.0"
+dependencies = [
+ "bytemuck",
+ "cubecl-common",
+ "cudarc",
+ "derive-new",
+ "half",
+ "log",
+ "maryml-cubecl-core",
+ "maryml-cubecl-cpp",
+ "maryml-cubecl-runtime",
+ "serde",
+]
+
+[[package]]
+name = "maryml-cubecl-macros"
+version = "0.10.0"
+dependencies = [
+ "cubecl-common",
+ "darling 0.23.0",
+ "derive-new",
+ "ident_case",
+ "inflections",
+ "prettyplease",
+ "proc-macro2",
+ "quote",
+ "syn 2.0.117",
+]
+
+[[package]]
+name = "maryml-cubecl-opt"
+version = "0.10.0"
+dependencies = [
+ "cubecl-common",
+ "cubecl-ir",
+ "float-ord",
+ "log",
+ "maryml-cubecl-core",
+ "num",
+ "petgraph",
+ "smallvec",
+ "stable-vec",
+ "type-map",
+]
+
+[[package]]
+name = "maryml-cubecl-runtime"
+version = "0.10.0"
+dependencies = [
+ "ahash",
+ "async-channel 2.5.0",
+ "bytemuck",
+ "cfg-if",
+ "cfg_aliases",
+ "cubecl-common",
+ "cubecl-ir",
+ "cubecl-zspace",
+ "derive-new",
+ "derive_more",
+ "dirs",
+ "enumset",
+ "hashbrown 0.16.1",
+ "log",
+ "md5",
+ "serde",
+ "serde_json",
+ "spin 0.10.0",
+ "thiserror 2.0.18",
+ "toml 1.1.2+spec-1.1.0",
+ "wasm-bindgen-futures",
+ "web-time",
+]
+
+[[package]]
+name = "maryml-cubecl-wgpu"
+version = "0.10.0"
+dependencies = [
+ "async-channel 2.5.0",
+ "bytemuck",
+ "cfg-if",
+ "cfg_aliases",
+ "cubecl-common",
+ "cubecl-ir",
+ "derive-new",
+ "derive_more",
+ "half",
+ "hashbrown 0.16.1",
+ "log",
+ "maryml-cubecl-core",
+ "maryml-cubecl-runtime",
+ "objc2 0.6.4",
+ "objc2-metal 0.3.2",
+ "sanitize-filename",
+ "wasm-bindgen-futures",
+ "wgpu",
+]
 
 [[package]]
 name = "matchers"
@@ -5554,8 +5510,7 @@ dependencies = [
 [[package]]
 name = "netwatch"
 version = "0.19.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4d9cbe01741347ef750d743d6690603f5eed8341e679fb51c8e629337aa11976"
+source = "git+https://github.com/erlkonig-ai/net-tools.git?rev=10ab7b328809103be74f6ca24258249715fae52b#10ab7b328809103be74f6ca24258249715fae52b"
 dependencies = [
  "atomic-waker",
  "bytes",
@@ -9671,12 +9626,37 @@ dependencies = [
 ]
 
 [[package]]
+name = "triblespace-gossip"
+version = "0.101.0"
+dependencies = [
+ "blake3",
+ "bytes",
+ "data-encoding",
+ "derive_more",
+ "futures-concurrency",
+ "hex",
+ "indexmap",
+ "iroh",
+ "iroh-base",
+ "iroh-metrics",
+ "irpc",
+ "n0-error",
+ "n0-future",
+ "postcard",
+ "rand 0.10.2",
+ "serde",
+ "tokio",
+ "tokio-util",
+ "tracing",
+]
+
+[[package]]
 name = "triblespace-gpu"
 version = "0.47.0"
 dependencies = [
- "cubecl",
  "itertools 0.14.0",
  "jerky",
+ "maryml-cubecl",
  "tracing",
  "triblespace-core",
 ]
@@ -9716,10 +9696,10 @@ dependencies = [
  "futures",
  "getrandom 0.4.2",
  "hex",
+ "hex-literal",
  "hifitime",
  "iroh",
  "iroh-base",
- "iroh-gossip",
  "iroh-mdns-address-lookup",
  "memmap2",
  "netwatch",
@@ -9728,6 +9708,7 @@ dependencies = [
  "tokio",
  "tracing",
  "triblespace-core",
+ "triblespace-gossip",
  "url",
 ]
 

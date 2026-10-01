@@ -19,12 +19,12 @@
 //! cargo run --release --example graph_views -- --headless --out-dir /tmp/graph_views
 //! ```
 
-use GORBIE::notebook;
-use GORBIE::widgets::{
+use lissajous::notebook;
+use lissajous::widgets::{
     LatticeEdge, LatticeGraph, LatticeMark, LatticeNode, LatticePresence, MeshGraph, MeshLink,
     MeshNode, MeshNodeState,
 };
-use GORBIE::NotebookCtx;
+use lissajous::NotebookCtx;
 
 /// The colony as it is today: three peers, which is the size the ring anchor
 /// exists to keep honest.

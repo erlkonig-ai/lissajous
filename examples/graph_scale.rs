@@ -14,7 +14,7 @@
 //! cargo run --release --example graph_scale
 //! ```
 
-use GORBIE::graph::{ForceLayout, LayoutParams};
+use lissajous::graph::{ForceLayout, LayoutParams};
 
 fn ring_with_chords(nodes: usize) -> Vec<(u32, u32)> {
     let mut edges = Vec::with_capacity(nodes * 2);
@@ -86,7 +86,7 @@ fn seeds(nodes: usize, steps: usize, cool: f32) {
         counted = by_count.step();
         area = by_area.step();
     }
-    let radius = |stats: &GORBIE::graph::LayoutStats| {
+    let radius = |stats: &lissajous::graph::LayoutStats| {
         ((stats.bounds[2] - stats.bounds[0]) + (stats.bounds[3] - stats.bounds[1])) * 0.25
     };
     println!(

@@ -1,12 +1,12 @@
 #!/usr/bin/env -S watchexec -r rust-script
 //! ```cargo
 //! [dependencies]
-//! GORBIE = { path = ".." }
+//! lissajous = { path = ".." }
 //! egui = "0.33"
 //! ```
 
-use GORBIE::cards::DEFAULT_CARD_PADDING;
-use GORBIE::prelude::*;
+use lissajous::cards::DEFAULT_CARD_PADDING;
+use lissajous::prelude::*;
 
 #[notebook]
 fn main(nb: &mut NotebookCtx) {

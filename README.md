@@ -1,10 +1,14 @@
 ![Discord Shield](https://discordapp.com/api/guilds/795317845181464651/widget.png?style=shield)
 
-# GORBIE! - A Minimalist Notebook Environment for Rust
+# Lissajous - A Minimalist Notebook Environment for Rust
+
+Lissajous is the notebook library formerly named GORBIE. Gorbie remains our
+mascot. Visit [lissajous.science](https://lissajous.science) or the
+[source repository](https://github.com/erlkonig-ai/lissajous).
 
 Every other notebook environment tries to make notebooks easier, we try to make them simpler.
 
-![GORBIE screenshot](https://github.com/triblespace/GORBIE/blob/main/assets/screenshot.png?raw=true)
+![Lissajous screenshot](https://github.com/erlkonig-ai/lissajous/blob/main/assets/screenshot.png?raw=true)
 
 ## Core Ideas
 A notebook is just Rust. By being fully native you can visualize huge datasets,
@@ -29,7 +33,7 @@ not hot-reload. Rust's incremental compilation keeps that fast enough to feel
 live.
 
 # Getting Started
-For development, use a normal Cargo project so your IDE can index GORBIE! and
+For development, use a normal Cargo project so your IDE can index Lissajous and
 provide full static analysis.
 
 Add the dependency and drop in a `main`:
@@ -37,17 +41,31 @@ Add the dependency and drop in a `main`:
 ```toml
 # Cargo.toml
 [dependencies]
-GORBIE = "0.9.13"
+lissajous = "0.19"
 ```
+
+Existing consumers can keep their `GORBIE::` Rust imports by using an explicit
+Cargo package alias instead:
+
+```toml
+GORBIE = { package = "lissajous", version = "0.19" }
+```
+
+The notebook macro resolves either dependency name. The companion proc-macro
+crate is `lissajous-macros` 0.10, normally re-exported by `lissajous` rather
+than added directly. This rename does not make the removed pre-0.19 APIs
+compatible; see the [changelog](CHANGELOG.md).
+
+The example below uses the normal `lissajous` dependency name.
 
 ```rust
 // src/main.rs
-use GORBIE::prelude::*;
+use lissajous::prelude::*;
 
 #[notebook]
 fn main(nb: &mut NotebookCtx) {
     nb.view(|ctx| {
-        md!(ctx, "# GORBIE!\nA _minimalist_ notebook environment for **Rust**.");
+        md!(ctx, "# Lissajous\nA _minimalist_ notebook environment for **Rust**.");
     });
 
     let slider = nb.state("slider", 0.5, |ctx, value| {
@@ -92,7 +110,7 @@ header to `notebook.rs` and paste the same `main` function below it:
 #!/usr/bin/env -S watchexec -r rust-script
 //! ```cargo
 //! [dependencies]
-//! GORBIE = "0.9.13"
+//! lissajous = "0.19"
 //! ```
 ```
 
@@ -106,14 +124,17 @@ dependencies - grab a coffee. Subsequent launches are fast enough that we use
 them for interactive editing.
 
 # Editor Integration
-GORBIE! does not ship an editor, but it can jump to card sources. Set
+Lissajous does not ship an editor, but it can jump to card sources. Set
 `GORBIE_EDITOR` to a command with placeholders `{{file}}`, `{{line}}`, and
 `{{column}}`, for example
 `GORBIE_EDITOR='code -g {{file}}:{{line}}:{{column}}'` for VS Code. When set, cards show
 an open-in-editor tab.
 
+`GORBIE_EDITOR`, the `gorbie_capture` output default, and existing `Gorbie*`
+style type names remain unchanged by the package rename.
+
 # Examples
-See `GORBIE/examples` for larger notebooks and patterns. Most are runnable with
+See `examples/` for larger notebooks and patterns. Most are runnable with
 the same `watchexec` + `rust-script` shebang.
 
 For cargo examples:
@@ -127,7 +148,7 @@ For cargo examples:
 Enable the `typst` feature for math and scientific typesetting:
 
 ```toml
-GORBIE = { version = "0.8", features = ["typst"] }
+lissajous = { version = "0.19", features = ["typst"] }
 ```
 
 ```rust
@@ -137,7 +158,7 @@ nb.view(|ctx| {
 ```
 
 Typst content renders as vector geometry — sharp at any zoom level, with
-text selection, copy, and double-click support. The GORBIE grid constants
+text selection, copy, and double-click support. The Lissajous grid constants
 (`grid-span`, `grid-gutter`, etc.) are available in the Typst preamble for
 grid-aligned column layouts. Compilation errors render inline as rustc-style
 diagnostics with source context and hints.
@@ -172,7 +193,7 @@ no physics dependency is enabled by default. Keep the view in notebook state
 and supply a snapshot captured by your own simulation or a saved frame:
 
 ```rust
-use GORBIE::widgets::{Bounds3, PhysicsScene, PhysicsView};
+use lissajous::widgets::{Bounds3, PhysicsScene, PhysicsView};
 
 let mut camera = PhysicsView::default().height(360.0).bounds(Bounds3 {
     min: [-0.02, -0.01, -0.01],
@@ -193,7 +214,7 @@ Enable optional `rapier` / `salva` features for adapters matching
 `rapier3d-f64 = 0.35.1` and `salva3d-f64 = 0.10.0`:
 
 ```rust,ignore
-use GORBIE::widgets::physics;
+use lissajous::widgets::physics;
 
 let mut snapshot = physics::rapier::scene(&rigid_bodies, &colliders);
 snapshot.extend(physics::salva::scene(&liquid_world));
@@ -226,10 +247,10 @@ real initialized physics objects. It does not fabricate a running simulation.
 
 
 # Feature Flags
-GORBIE! defaults to a lean build with `markdown` enabled. Add extras as needed:
+Lissajous defaults to a lean build with `markdown` enabled. Add extras as needed:
 - `markdown`: rich Markdown rendering with `md!` and `note!` (default).
 - `typst`: Typst integration — math, scientific typesetting, and full document rendering via `typst!` macro. Renders as vector geometry directly on egui's Painter (no SVG, no raster). Includes the RAL color palette, grid-aligned layout constants, text selection, and inline error diagnostics.
-- `polars`: dataframe widget (Polars + GORBIE table).
+- `polars`: dataframe widget (Polars + Lissajous table).
 - `triblespace`: immutable TribleSpace data inspection with the entity graph widget.
 - `cubecl`: GPU simulated-annealing ordering for the entity inspector (use with `triblespace`).
 - `telemetry`: span-based profiling via `tracing` that writes into a dedicated TribleSpace pile.

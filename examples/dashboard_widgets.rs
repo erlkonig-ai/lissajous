@@ -1,7 +1,7 @@
 #!/usr/bin/env -S watchexec -r rust-script
 //! ```cargo
 //! [dependencies]
-//! GORBIE = { path = "..", features = ["plots"] }
+//! lissajous = { path = "..", features = ["plots"] }
 //! egui = "0.34"
 //! egui_plot = "0.35"
 //! ```
@@ -11,10 +11,10 @@
 
 use std::time::Duration;
 
-use GORBIE::notebook;
-use GORBIE::widgets;
-use GORBIE::widgets::{BudgetGauge, EventFeed, MetricStrip, StreamLane};
-use GORBIE::NotebookCtx;
+use lissajous::notebook;
+use lissajous::widgets;
+use lissajous::widgets::{BudgetGauge, EventFeed, MetricStrip, StreamLane};
+use lissajous::NotebookCtx;
 
 const LANE_TAGS: [&str; 4] = ["sense", "plan", "act", "note"];
 
@@ -41,7 +41,7 @@ fn synthetic_ms(t: f64) -> f64 {
 
 #[notebook]
 fn main(nb: &mut NotebookCtx) {
-    let padding = GORBIE::cards::DEFAULT_CARD_PADDING;
+    let padding = lissajous::cards::DEFAULT_CARD_PADDING;
 
     nb.view(move |ctx| {
         widgets::markdown(

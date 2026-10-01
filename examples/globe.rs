@@ -23,7 +23,7 @@ use bytemuck::{Pod, Zeroable};
 use egui_wgpu::wgpu;
 use egui_wgpu::wgpu::util::DeviceExt;
 use glam::{Mat4, Vec3};
-use GORBIE::prelude::*;
+use lissajous::prelude::*;
 
 // ── Camera state (persists across frames) ────────────────────────────
 
@@ -51,7 +51,7 @@ fn main(nb: &mut NotebookCtx) {
             // The colour-target format egui is rendering into — needed
             // to build a pipeline whose output matches egui's pass.
             // Present only on the wgpu backend (GORBIE selects it live).
-            let target_format = GORBIE::wgpu_target_format(ctx.ctx());
+            let target_format = lissajous::wgpu_target_format(ctx.ctx());
 
             let ui = ctx.ui_mut();
             let size = egui::vec2(ui.available_width(), 460.0);

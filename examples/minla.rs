@@ -1,7 +1,7 @@
 #!/usr/bin/env -S watchexec -r rust-script
 //! ```cargo
 //! [dependencies]
-//! GORBIE = { path = ".." }
+//! lissajous = { path = ".." }
 //! cubecl = { version = "0.9.0", default-features = false, features = ["wgpu", "std"] }
 //! egui = "0.33"
 //! egui_plot = "0.34"
@@ -20,9 +20,9 @@ use std::sync::{
     Mutex,
 };
 
-use GORBIE::cards::DEFAULT_CARD_PADDING;
-use GORBIE::prelude::*;
-use GORBIE::themes::{self, GorbieToggleButtonStyle};
+use lissajous::cards::DEFAULT_CARD_PADDING;
+use lissajous::prelude::*;
+use lissajous::themes::{self, GorbieToggleButtonStyle};
 
 const NODE_NAMES: [&str; 10] = [
     "source", "parse", "ast", "types", "solver", "layout", "render", "widgets", "cache", "io",

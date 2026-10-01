@@ -5,8 +5,8 @@
 //! `cargo run --example physics_widgets --features rapier,salva`
 
 use egui::Color32;
-use GORBIE::widgets::{Bounds3, Label3, LegendEntry, PhysicsScene, PhysicsView};
-use GORBIE::{notebook, NotebookCtx};
+use lissajous::widgets::{Bounds3, Label3, LegendEntry, PhysicsScene, PhysicsView};
+use lissajous::{notebook, NotebookCtx};
 
 fn geometry() -> PhysicsScene {
     let mut scene = PhysicsScene::default();
@@ -52,7 +52,7 @@ fn rigid_snapshot() -> PhysicsScene {
             .translation(Vector::new(1.2, 0.0, 0.0))
             .build(),
     );
-    let mut scene = GORBIE::widgets::physics::rapier::scene(&bodies, &colliders);
+    let mut scene = lissajous::widgets::physics::rapier::scene(&bodies, &colliders);
     scene
         .warnings
         .push("Real initialized ColliderSet/RigidBodySet; no dynamics have been stepped.".into());
@@ -75,7 +75,7 @@ fn fluid_snapshot() -> PhysicsScene {
         }
     }
     let fluid = Fluid::new(positions, 0.065, 1000.0, Default::default());
-    let mut scene = GORBIE::widgets::physics::salva::fluid_scene(&fluid);
+    let mut scene = lissajous::widgets::physics::salva::fluid_scene(&fluid);
     scene.warnings.push(
         "Actual initialized Fluid positions/radius; no fluid solve or equilibrium claim.".into(),
     );

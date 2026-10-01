@@ -1,11 +1,11 @@
 #!/usr/bin/env -S watchexec -r rust-script
 //! ```cargo
 //! [dependencies]
-//! GORBIE = { path = ".." }
+//! lissajous = { path = ".." }
 //! egui = "0.33"
 //! ```
 
-use GORBIE::prelude::*;
+use lissajous::prelude::*;
 
 #[notebook]
 fn main(nb: &mut NotebookCtx) {
@@ -529,9 +529,9 @@ subtle visual tension that keeps the layout from feeling sterile."
              \n\
              Typst links are clickable:\n\
              #link(\"https://typst.app\")[Typst] and\n\
-             #link(\"https://github.com/triblespace/GORBIE\")[GORBIE on GitHub].\n\
+             #link(\"https://github.com/erlkonig-ai/lissajous\")[Lissajous on GitHub].\n\
              \n\
-             Auto-detected URLs also work: https://docs.rs/gorbie"
+             Auto-detected URLs also work: https://docs.rs/lissajous"
         );
     });
 

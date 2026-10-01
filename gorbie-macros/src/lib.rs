@@ -423,7 +423,9 @@ fn which(name: &str) -> std::result::Result<String, ()> {
 }
 
 fn gorbie_path() -> proc_macro2::TokenStream {
-    match crate_name("GORBIE") {
+    // Resolve the package, not a particular dependency key. Cargo users may
+    // keep `GORBIE = { package = "lissajous", ... }` or choose another alias.
+    match crate_name("lissajous") {
         Ok(FoundCrate::Itself) => {
             if is_library_crate() {
                 quote!(crate)
@@ -451,6 +453,6 @@ fn is_library_crate() -> bool {
 
 fn package_name() -> String {
     std::env::var("CARGO_PKG_NAME")
-        .unwrap_or_else(|_| "GORBIE".to_owned())
+        .unwrap_or_else(|_| "lissajous".to_owned())
         .replace('-', "_")
 }

@@ -118,7 +118,7 @@ struct HeadlessWgpuRunner {
 impl HeadlessWgpuRunner {
     fn new(options: CaptureOptions, theme: HeadlessTheme) -> HeadlessResult<Self> {
         let ctx = egui::Context::default();
-        // Make headless mode readable by widgets (GORBIE::is_headless)
+        // Make headless mode readable by widgets (lissajous::is_headless)
         // — e.g. sections force-open during capture so screenshots
         // always show their contents.
         crate::mark_headless(&ctx);

@@ -1,13 +1,13 @@
 [package]
-name = "GORBIE"
-description = "GORBIE! Is a minimalist notebook library for Rust."
-version = "0.18.1"
+name = "lissajous"
+description = "A minimalist native notebook library for Rust."
+version = "0.19.0"
 edition = "2021"
 authors = ["Jan-Paul Bultmann <jp@bultmann.eu>"]
 license = "MIT OR Apache-2.0"
-documentation = "https://docs.rs/gorbie"
-homepage = "https://github.com/triblespace/GORBIE"
-repository = "https://github.com/triblespace/GORBIE"
+documentation = "https://docs.rs/lissajous"
+homepage = "https://lissajous.science"
+repository = "https://github.com/erlkonig-ai/lissajous"
 include = [
     "Cargo.toml",
     "README.md",
@@ -29,7 +29,7 @@ include = [
 ]
 
 [dependencies]
-gorbie-macros = { version = "0.9.0", path = "gorbie-macros" }
+lissajous-macros = { version = "0.10.0", path = "gorbie-macros" }
 eframe = { version = "0.34", features = ["persistence", "wgpu"] }
 egui = { version = "0.34", features = ["color-hex"] }
 egui-wgpu = "0.34"
@@ -61,12 +61,12 @@ version = "0.35"
 optional = true
 
 [dependencies.triblespace]
-version = "0.47"
+version = "0.47.0"
 path = "../triblespace-rs"
 optional = true
 
 [dependencies.triblespace-net]
-version = "0.47"
+version = "0.47.0"
 path = "../triblespace-rs/triblespace-net"
 optional = true
 
@@ -77,6 +77,8 @@ features = ["lazy", "sql", "polars-ops"]
 
 [dependencies.cubecl]
 version = "0.10.0"
+package = "maryml-cubecl"
+path = "../cubecl-fork/crates/cubecl"
 default-features = false
 features = ["wgpu", "std"]
 optional = true
@@ -193,3 +195,8 @@ required-features = ["triblespace"]
 # inside RUST_BACKTRACE frames, and gdb locals.
 [profile.dev]
 debug = 0
+
+# SOURCE-BUILD-ONLY: same tested network readiness repair.
+# Registry consumers intentionally use upstream netwatch without these fixes.
+[patch.crates-io]
+netwatch = { git = "https://github.com/erlkonig-ai/net-tools.git", rev = "10ab7b328809103be74f6ca24258249715fae52b" }
