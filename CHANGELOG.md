@@ -4,6 +4,17 @@ All notable changes to this project will be documented in this file.
 
 ## Unreleased
 
+## 0.19.1 - 2026-10-03
+
+- Borrowed geospatial `MapView` with persistent camera and opaque caller-owned
+  selection, dateline-aware Web Mercator geometry, invalid-vertex gaps,
+  explicit fitting, and local approximate scale; no network or database bridge.
+- Map callers can hide controls and projection annotations independently.
+  Background clicks and map fitting clear selection immediately; drags and
+  scroll zoom preserve selection.
+- Floating card outlines remain above full-bleed content in light and dark
+  themes.
+
 ## 0.19.0 - 2026-10-01
 
 - **Lissajous.** The notebook library is now the `lissajous` crate, hosted at

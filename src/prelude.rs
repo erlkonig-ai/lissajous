@@ -1,5 +1,8 @@
 //! Re-exports commonly used types, constants, and helpers for convenient glob imports.
 pub use crate::widgets;
+pub use crate::widgets::map::{
+    GeoPosition, MapCamera, MapFeature, MapGeometry, MapLegendEntry, MapResponse, MapView,
+};
 
 // Re-export macros and helpers
 pub use crate::card_ctx::module_height;

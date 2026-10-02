@@ -163,6 +163,35 @@ text selection, copy, and double-click support. The Lissajous grid constants
 grid-aligned column layouts. Compilation errors render inline as rustc-style
 diagnostics with source context and hints.
 
+# Located observations
+
+`widgets::MapView` displays bounded, borrowed WGS84 point/path query results.
+Keep `MapCamera` and `Option<Id>` in notebook state; the caller's opaque entity
+IDs come back on hover/click without a database, parser or network layer inside
+the widget. Pan and zoom survive refreshed data. The fit button is explicit.
+
+```rust,ignore
+let result = MapView::new(&features, &mut camera, &mut selected)
+    .legend(&legend)
+    .height(360.0)
+    .show(ui);
+if let Some(entity) = result.clicked {
+    // Query this entity's observations/provenance in the caller.
+}
+```
+
+Longitude/latitude are degrees in EPSG:4326. Display uses Web Mercator; invalid
+coordinates and latitudes beyond ±85.05112878° are skipped and counted rather
+than relocated. Paths follow the shorter longitude arc, including across the
+dateline, and invalid vertices break them. The scale bar is an approximate local
+ground distance at the view centre, not an area-preserving measurement.
+
+The tile-free canvas shows supplied geometry only: blank is not a land/water
+classification. No satellite imagery or basemap is fetched. A future raster
+layer must declare its projected/georeferenced extent; a GeoJSON outline alone
+is not a georeferenced image. `geospatial_map` is a synthetic example, not a
+real measurement fixture.
+
 # Headless capture
 
 Native callers can use `NotebookConfig::capture(options, body, emit)` to receive

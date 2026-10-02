@@ -256,6 +256,8 @@ dependencies = [
 [[package]]
 name = "anybytes"
 version = "0.20.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7e42634e2792e69f4231e461fb180029edd3ac260f121fe8215dd6a9710b20cd"
 dependencies = [
  "bytes",
  "memmap2",
@@ -4562,6 +4564,8 @@ checksum = "92ecc6618181def0457392ccd0ee51198e065e016d1d527a7ac1b6dc7c1f09d2"
 [[package]]
 name = "jerky"
 version = "0.10.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d770c53ac31bd2e8643e63da4dacb0e018a15e977542b82f9df06d7b75a6ebef"
 dependencies = [
  "anybytes",
  "maryml-cubecl",
@@ -4862,7 +4866,7 @@ dependencies = [
 
 [[package]]
 name = "lissajous"
-version = "0.19.0"
+version = "0.19.1"
 dependencies = [
  "bytemuck",
  "comemo",
@@ -5006,6 +5010,8 @@ checksum = "d3d25b0e0b648a86960ac23b7ad4abb9717601dec6f66c165f5b037f3f03065f"
 [[package]]
 name = "maryml-cubecl"
 version = "0.10.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "fbf5fa1107b6623b86d198806f0b08d1ec7f37197bcc9135934a371805f5d54d"
 dependencies = [
  "cubecl-ir",
  "half",
@@ -5018,6 +5024,8 @@ dependencies = [
 [[package]]
 name = "maryml-cubecl-core"
 version = "0.10.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3f31ff5adbb878743cfe8e5751d90e164da812874a02c4ea9afe691b090f2287"
 dependencies = [
  "bitflags 2.11.0",
  "bytemuck",
@@ -5043,6 +5051,8 @@ dependencies = [
 [[package]]
 name = "maryml-cubecl-cpp"
 version = "0.10.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9e8dc08264660af77e31f8d24ae1ac71ef3326407a3cac2a187f537d0159f005"
 dependencies = [
  "bytemuck",
  "cubecl-common",
@@ -5058,6 +5068,8 @@ dependencies = [
 [[package]]
 name = "maryml-cubecl-cuda"
 version = "0.10.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5a1523af0572b880bbfc85992cf8820671d9e08bfacb61e05d5fa5e556f3667d"
 dependencies = [
  "bytemuck",
  "cubecl-common",
@@ -5074,6 +5086,8 @@ dependencies = [
 [[package]]
 name = "maryml-cubecl-macros"
 version = "0.10.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e234c0b4ad098d8dce9e74dfd831ad4e57d8f4767a1d82b8383e0f597517c410"
 dependencies = [
  "cubecl-common",
  "darling 0.23.0",
@@ -5089,6 +5103,8 @@ dependencies = [
 [[package]]
 name = "maryml-cubecl-opt"
 version = "0.10.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "aa335a7b3ffe0da67a485f870298c14e7a1d2fbb645b232e4353c6bda6a00b21"
 dependencies = [
  "cubecl-common",
  "cubecl-ir",
@@ -5105,6 +5121,8 @@ dependencies = [
 [[package]]
 name = "maryml-cubecl-runtime"
 version = "0.10.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b062f9f20fe8d3226396f594b58fb21d3054822b0739ec308f6ed35b4cc72276"
 dependencies = [
  "ahash",
  "async-channel 2.5.0",
@@ -5133,6 +5151,8 @@ dependencies = [
 [[package]]
 name = "maryml-cubecl-wgpu"
 version = "0.10.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "826b8ad88b22ff6f1c729fd6b0283d1ad0b2b72499b57761ed3ffc91be059e9e"
 dependencies = [
  "async-channel 2.5.0",
  "bytemuck",
@@ -9549,6 +9569,8 @@ dependencies = [
 [[package]]
 name = "triblespace"
 version = "0.47.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "10943d61cb1e798bcd585c5db56071113ba2d20eadff26dd658ea3b895e9ac14"
 dependencies = [
  "ed25519-dalek 2.2.0",
  "log",
@@ -9564,6 +9586,8 @@ dependencies = [
 [[package]]
 name = "triblespace-core"
 version = "0.47.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "fcf1d79685c8e7bd5d9a7bd57de4f4089efbd93d943a4c0dc91252a444c8bdde"
 dependencies = [
  "ahash",
  "anybytes",
@@ -9618,6 +9642,8 @@ dependencies = [
 [[package]]
 name = "triblespace-core-macros"
 version = "0.47.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6e18ae31160933ee1609ca06732f8eba7d2e6a0cdfe0761f1adec900709af217"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -9628,6 +9654,8 @@ dependencies = [
 [[package]]
 name = "triblespace-gossip"
 version = "0.101.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a5c6f552573971b95cfdfd09a881613fdc0eb16c5de8505eba18796181d1dd3d"
 dependencies = [
  "blake3",
  "bytes",
@@ -9653,6 +9681,8 @@ dependencies = [
 [[package]]
 name = "triblespace-gpu"
 version = "0.47.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "edf920a8b3affa2764a94d49cd6946b73a1eaa7eab283eeeec8dc32b65dccda2"
 dependencies = [
  "itertools 0.14.0",
  "jerky",
@@ -9664,6 +9694,8 @@ dependencies = [
 [[package]]
 name = "triblespace-macros"
 version = "0.47.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a47fc941d57aa0ae9a300d3ac85c715f293462703ae7e2354c72632f948dc134"
 dependencies = [
  "ed25519-dalek 2.2.0",
  "hex",
@@ -9679,6 +9711,8 @@ dependencies = [
 [[package]]
 name = "triblespace-macros-common"
 version = "0.47.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "dd0c5befeb008bf072fe4fa7e13c778080de16a44f2a912d7b2b9db6c6e51bf4"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -9688,6 +9722,8 @@ dependencies = [
 [[package]]
 name = "triblespace-net"
 version = "0.47.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3a8ce2e2d005cec50dfb9149ea5e44b7edeb7ff27713f5ddaecd083091c5c13d"
 dependencies = [
  "anybytes",
  "anyhow",
@@ -9715,6 +9751,8 @@ dependencies = [
 [[package]]
 name = "triblespace-paths"
 version = "0.47.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d228dd71064d4f86e2de9d68f42f9355eed95c99b8170b905928af9e71d12836"
 dependencies = [
  "triblespace-core",
 ]

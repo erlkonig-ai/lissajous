@@ -22,6 +22,8 @@ pub mod label;
 pub mod lattice;
 /// Background-loading toggle buttons and auto-loaders.
 pub mod load;
+/// Borrowed WGS84 point/path maps with caller-owned pan, zoom and selection.
+pub mod map;
 /// Markdown rendering via gorbie-commonmark.
 #[cfg(feature = "markdown")]
 pub mod markdown;
@@ -73,6 +75,9 @@ pub use lattice::{
 };
 pub use load::load_auto;
 pub use load::load_button;
+pub use map::{
+    GeoPosition, MapCamera, MapFeature, MapGeometry, MapLegendEntry, MapResponse, MapView,
+};
 #[cfg(feature = "markdown")]
 pub use markdown::markdown;
 pub use mesh::{MeshGraph, MeshLink, MeshNode, MeshNodeState};

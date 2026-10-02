@@ -330,6 +330,10 @@ fn draw_card_chrome(
     );
     let content_rect = card_rect.shrink(frame.stroke.width);
     ui.painter().set(background_idx, frame.paint(content_rect));
+    // Full-bleed bodies paint over the background frame's inside stroke.
+    // Keep its fill and shadow behind the body, but its boundary above it.
+    ui.painter()
+        .rect_stroke(card_rect, 0.0, frame.stroke, egui::StrokeKind::Inside);
 
     // ── drag handle ──────────────────────────────────────────────────
     let handle_height = GRID_ROW_MODULE;
@@ -385,5 +389,110 @@ fn draw_card_chrome(
         drag_delta,
         dragged: is_dragging,
         layer_id: handle_resp.layer_id,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn collect_rects<'a>(
+        shape: &'a egui::Shape,
+        clip_rect: egui::Rect,
+        rects: &mut Vec<(egui::Rect, &'a egui::epaint::RectShape)>,
+    ) {
+        match shape {
+            egui::Shape::Rect(rect) => rects.push((clip_rect, rect)),
+            egui::Shape::Vec(shapes) => {
+                for shape in shapes {
+                    collect_rects(shape, clip_rect, rects);
+                }
+            }
+            _ => {}
+        }
+    }
+
+    #[test]
+    fn floating_outline_is_above_full_bleed_and_padded_bodies_in_both_themes() {
+        for visuals in [egui::Visuals::light(), egui::Visuals::dark()] {
+            for padding in [0_i8, 12_i8] {
+                let context = egui::Context::default();
+                let outline =
+                    egui::Stroke::new(1.0, visuals.widgets.noninteractive.bg_stroke.color);
+                let background_fill = visuals.window_fill;
+                context.set_visuals(visuals.clone());
+                let store = state::StateStore::default();
+                let body_fill = egui::Color32::from_rgb(230, 30, 170);
+                let mut card_rect = egui::Rect::NOTHING;
+                let mut body_rect = egui::Rect::NOTHING;
+                let output = context.run_ui(
+                    egui::RawInput {
+                        screen_rect: Some(egui::Rect::from_min_size(
+                            egui::Pos2::ZERO,
+                            egui::vec2(640.0, 480.0),
+                        )),
+                        ..Default::default()
+                    },
+                    |ui| {
+                        let response =
+                            draw_card_chrome(ui, 320.0, 0.0, &store, "Dock", &mut |ctx| {
+                                ctx.with_padding(egui::Margin::same(padding), |ctx| {
+                                    let ui = ctx.ui_mut();
+                                    let (rect, _) = ui.allocate_exact_size(
+                                        egui::vec2(
+                                            ui.available_width(),
+                                            120.0 - 2.0 * f32::from(padding),
+                                        ),
+                                        egui::Sense::hover(),
+                                    );
+                                    body_rect = rect;
+                                    ui.painter_at(rect).rect_filled(rect, 0.0, body_fill);
+                                });
+                            });
+                        card_rect = response.card_rect;
+                    },
+                );
+
+                assert_eq!(card_rect.size(), egui::vec2(320.0, 120.0));
+                assert_eq!(body_rect, card_rect.shrink(f32::from(padding)));
+                let mut rects = Vec::new();
+                for clipped in &output.shapes {
+                    collect_rects(&clipped.shape, clipped.clip_rect, &mut rects);
+                }
+                let background_index = rects
+                    .iter()
+                    .position(|(_, rect)| {
+                        rect.rect == card_rect
+                            && rect.fill == background_fill
+                            && rect.stroke == outline
+                    })
+                    .expect("background frame retains its exact geometry and stroke");
+                let body_index = rects
+                    .iter()
+                    .position(|(_, rect)| rect.rect == body_rect && rect.fill == body_fill)
+                    .expect("opaque body fill is present");
+                let outline_index = rects
+                    .iter()
+                    .position(|(_, rect)| {
+                        rect.rect == card_rect
+                            && rect.fill == egui::Color32::TRANSPARENT
+                            && rect.stroke == outline
+                            && rect.stroke_kind == egui::StrokeKind::Inside
+                    })
+                    .expect("separate outer outline is present");
+                assert!(
+                    background_index < body_index,
+                    "background stays behind the body"
+                );
+                assert!(
+                    body_index < outline_index,
+                    "outer outline stays above the body"
+                );
+                assert!(
+                    rects[outline_index].0.contains_rect(card_rect),
+                    "outline is not clipped away"
+                );
+            }
+        }
     }
 }
