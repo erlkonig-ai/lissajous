@@ -11,6 +11,7 @@ Every other notebook environment tries to make notebooks easier, we try to make 
 ![Lissajous screenshot](https://github.com/erlkonig-ai/lissajous/blob/main/assets/screenshot.png?raw=true)
 
 ## Core Ideas
+
 A notebook is just Rust. By being fully native you can visualize huge datasets,
 build complex UIs, and leverage the entire Rust ecosystem without being forced to
 shoehorn everything into a web browser, JavaScript and serialized JSON.
@@ -24,9 +25,17 @@ well-tuned setup, and notebook tools often spend time re-inventing the wheel
 with worse results. We focus on the notebook experience and plug into the
 tools you already use.
 
-Immediate-mode: the notebook redraws every frame, and state lives in
-`nb.state` handles. This makes it easy to build interactive UIs that are extremely
-robust and responsive to user input without complex reactivity systems.
+Compose a notebook from cells that own their internal state and expose useful
+values to other cells, in the spirit of Observable and marimo. A map can publish
+a selection; a plot can consume that selection without knowing about the map's
+camera, gestures or drawing cache. The notebook body wires those dependencies
+together; it need not become a central application controller.
+
+This reactive composition is distinct from the rendering mechanism. Lissajous
+uses immediate-mode egui: the notebook and card drawing code run again on
+repaint, while keyed state survives. Dependencies and recomputation are explicit
+Rust, not a runtime source analyzer or an automatic dependency scheduler. See
+[Authoring notebooks](#authoring-notebooks) before building a larger notebook.
 
 Interactive development stays simple: we re-run the notebook on each change,
 not hot-reload. Rust's incremental compilation keeps that fast enough to feel
@@ -96,6 +105,106 @@ that state key is absent.
 For reload-on-change with Cargo, use:
 `watchexec -r -w src -w Cargo.toml -- cargo run`
 or `cargo watch -x run` (install with `cargo install cargo-watch`).
+
+## Authoring notebooks
+
+### Private machinery, useful public values
+
+Treat each instrument as a cell with a small interface. Keep a map's camera,
+gesture state, prepared geometry and pending map queries with the map. Publish
+the selected entity or area. A plot owns its axes, display options and pending
+series query; its input is the selection, not the map controller. Another
+selector should be able to supply that same input without rewriting the plot.
+
+Use `nb.state_with` for retained cell state, especially resources with nontrivial
+construction. Its initializer is lazy, not asynchronous: it runs only when the
+key is absent, but still runs on the calling thread. Starting a worker there can
+be appropriate; opening a large dataset or doing slow work there can still block
+the UI. The returned `StateId<T>` is a typed handle, not a subscription or a
+read-only capability. Share handles deliberately, and read or copy only the
+inputs a consumer needs. Small copied outputs and narrow Rust interfaces are
+also useful; not every output needs its own visible card.
+
+Avoid one `AppState` containing every instrument and a central `refresh()` that
+rebuilds everything. Splitting that object into nested `map`, `plot` and `table`
+fields does not change the architecture if every cell still receives the whole
+controller and depends on its orchestration. A small composition root connecting
+independent cells is different from a god object. Legitimate coordinated edits
+through several typed handles remain supported; see
+[`multi_state`](examples/multi_state.rs). Keep lock scopes short, use a consistent
+order when taking several locks, and never reacquire a cell's own write-locked
+state through its handle from inside that cell's callback.
+
+### Worked example: map selection, independent consumer
+
+Run `cargo run --example geospatial_map` and read
+[`examples/geospatial_map.rs`](examples/geospatial_map.rs). It contains three
+small cells:
+
+```text
+selection: StateId<Option<u64>>  <---  map's private camera + prepared geometry
+             |
+             +---> independent selection summary
+```
+
+The visible selection card shows the public value and offers a clear button.
+The map receives that handle, keeps its own `MapState` private inside a module,
+and publishes only selection changes. The summary accepts the same typed
+selection handle; it never reads `MapState`. Its own `DerivedState` recomputes a
+small label only when the selection changes. Replacing the map with a list
+selector leaves the summary unchanged. The geometry and IDs are synthetic;
+there is no dataset reader, network service or domain-specific backend hidden
+in the example.
+
+This is explicit value flow, not a promise of topological or atomic evaluation
+of all cells. Paint order can affect which repaint first observes an edit. The
+example requests a repaint after publishing a selection so an earlier card can
+also display it. Detaching or redocking a card changes its placement, not its
+state ownership, inputs or resource lifetime.
+
+### Choose recomputation explicitly
+
+`DerivedState<K, T>::get(key, compute)` is a synchronous, single-current-key memo.
+Use it for inexpensive derivations, not heavy I/O or decoding on the paint path.
+Its key must account for every relevant input: selection, filter, source or
+snapshot identity, and any other parameters. Read changing parameters from the
+closure's key; a source revision can represent the corresponding immutable
+source. Returning to an older key recomputes; there is no multi-key result cache.
+
+`ComputedState<T>` offers a background result slot on native targets, but it is
+not keyed computation or a latest-request queue. Call `poll`, and call `spawn`
+only when your input requires new work. While a task is running, `spawn` does
+not enqueue a replacement; repeatedly calling it after completion starts new
+work. `set` drops the tracked join handle rather than cooperatively cancelling
+the running thread. On wasm, `spawn` is synchronous. Choose another suitable
+worker/executor when those properties do not fit the resource or platform.
+
+For asynchronous consumers, capture an immutable input and carry its exact
+request identity back with the answer. Compare that identity with the current
+input before presenting the result; include a generation when a refresh or an
+A → B → A change must invalidate an earlier A. Keep the latest desired request
+when a bounded worker is busy, and submit it when capacity returns. Decide
+explicitly whether an old answer remains visible, labelled as old, or is cleared
+while waiting. Wake the UI on completion and keep an appropriate polling/repaint
+path while work is pending. These are application responsibilities, not behavior
+inferred by reading a `StateId`.
+
+### Share sources, not controllers
+
+Cell ownership does not mean one database connection, file reader or worker per
+cell. Retain one appropriate resource session at the source boundary and share
+its narrow read interface or immutable snapshots with consumers. Cells own their
+questions and bounded answers; the source owns I/O and observation lifetime.
+For a native pile, reuse its retained session rather than reopening the same
+pile for each card. The same principle applies to a database, a simulation or
+an in-memory dataset. Do not copy an entire source into a second application
+catalogue merely to connect cells. Keep slow acquisition and computation off
+paint, and preserve the source identity and authority relevant to each answer.
+
+API details: [`NotebookCtx::state_with`](https://docs.rs/lissajous/0.19.1/lissajous/struct.NotebookCtx.html#method.state_with),
+[`StateId`](https://docs.rs/lissajous/0.19.1/lissajous/state/struct.StateId.html),
+[`DerivedState`](https://docs.rs/lissajous/0.19.1/lissajous/dataflow/struct.DerivedState.html),
+and [`ComputedState`](https://docs.rs/lissajous/0.19.1/lissajous/dataflow/struct.ComputedState.html).
 
 ## Script Workflow (Quick/Share)
 If you want a single-file notebook or quick distribution, use

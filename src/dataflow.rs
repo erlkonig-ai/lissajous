@@ -6,6 +6,13 @@ use eframe::egui;
 /// to check for completion. The current value remains accessible while a new one
 /// is being computed.
 ///
+/// This slot has no dependency key, latest-request queue or cooperative
+/// cancellation. The caller decides when inputs require new work, carries their
+/// identity with the result and checks it before displaying an answer. While a
+/// task is tracked, [`spawn`](Self::spawn) does not queue a replacement. Calling
+/// it again after completion starts another computation. See the
+/// [crate-level authoring guide](crate) for composing independent cells.
+///
 /// On wasm, `spawn` runs the action synchronously (no threads available).
 pub struct ComputedState<T> {
     value: T,
@@ -33,7 +40,11 @@ impl<T> ComputedState<T> {
         &mut self.value
     }
 
-    /// Replaces the current value and cancels any in-flight computation.
+    /// Replaces the current value and stops tracking any in-flight computation.
+    ///
+    /// On native targets, dropping the join handle detaches the thread: its
+    /// action continues running, but this slot will not collect that result.
+    /// This is not cooperative cancellation or a resource shutdown mechanism.
     pub fn set(&mut self, value: T) {
         self.value = value;
         #[cfg(not(target_arch = "wasm32"))]

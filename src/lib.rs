@@ -1,17 +1,28 @@
-//! ## Working with mutable/non-cloneable things.
-//! Sometimes when working with existing code, libraries or even std things like
-//! files, can introduce an impedance mismatch with a dataflow-style model.
-//! Often it is enough to wrap the object in question into another layer of `Arc`s
-//! and `RWLock`s in addition to what Gorby already does with its shared state
-//! store.
+//! # Authoring notebooks
 //!
-//! For heavier work, `ComputedState` can run background tasks and hold the latest
-//! value. Use `Option<T>` when a value may be absent while a computation runs.
+//! Compose cells with private state and useful public values, in the spirit of
+//! Observable and marimo. A map owns its camera and drawing cache; it publishes
+//! a selection that a plot can consume without depending on the map controller.
+//! The notebook body connects those interfaces, rather than owning every
+//! instrument in one mutable application object.
 //!
-//! But sometimes that isn't enough, e.g. when you want to display some application
-//! global state. This is why `NotebookCtx::state` and `NotebookCtx::view` are carefully
-//! designed to stay independent from any dataflow runtime. Instead they can be used,
-//! like any other mutable rust type, via the typed `StateId` handle.
+//! This reactive composition is independent of immediate-mode rendering: card
+//! bodies run on repaint, while keyed state survives. Lissajous does not analyze
+//! source code or automatically schedule a dependency graph. Use
+//! [`NotebookCtx::state_with`] for lazy retained state, [`state::StateId`] for
+//! explicit typed access, and [`dataflow::DerivedState`] for small synchronous
+//! derivations keyed by all relevant inputs. [`dataflow::ComputedState`] supplies
+//! a native background result slot, not keyed cancellation or latest-request
+//! scheduling; asynchronous consumers must preserve input identity and reject
+//! stale answers. Keep heavy work off paint and share a resource session or
+//! immutable source observations instead of opening one reader per cell.
+//!
+//! See the [notebook authoring guide and worked map example](
+//! https://github.com/erlkonig-ai/lissajous#authoring-notebooks) in the packaged
+//! README and examples. Detaching a card changes placement, not ownership.
+//! Coordinated access to several handles remains useful when it is the actual
+//! operation; keep lock scopes short and avoid reacquiring a cell's own state
+//! from inside its write-locked callback.
 //!
 
 #![allow(non_snake_case)]
@@ -694,6 +705,8 @@ impl NotebookCtx {
     ///
     /// Returns a [`StateId`](state::StateId) handle for reading/writing the
     /// state from other cards.
+    /// Prefer exposing useful values or narrow interfaces over passing a whole
+    /// application controller; see the [crate-level authoring guide](crate).
     #[track_caller]
     pub fn state_with<K, T, I, F>(&mut self, key: &K, init: I, function: F) -> state::StateId<T>
     where

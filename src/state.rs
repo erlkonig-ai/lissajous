@@ -106,6 +106,11 @@ impl StateStore {
 ///
 /// Cheap to copy and safe to pass between cards. The type parameter `T`
 /// prevents accidental access to the wrong type at compile time.
+/// This is explicit access, not a subscription, projection or read-only
+/// capability. Prefer a useful shared value or narrow interface to a handle for
+/// an entire application controller; see the [crate-level authoring guide](crate).
+/// A stateful card already holds its state's write lock during its callback:
+/// do not reacquire that same state through a handle there.
 #[derive(Debug, PartialEq, Eq, Hash)]
 pub struct StateId<T> {
     id: egui::Id,
