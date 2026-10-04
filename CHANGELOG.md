@@ -4,6 +4,10 @@ All notable changes to this project will be documented in this file.
 
 ## Unreleased
 
+- Lazy single-input and tuple `.map` expressions share `.read(ctx)` with state
+  handles; opt-in `.memo(stable_key)` retains one current-input result without
+  a cache card. `nb.view(value.tap())` displays a lazy Debug view. Dependencies
+  remain explicit; there is no automatic scheduler or change to async work.
 - **One lazy retained-state API.** `NotebookCtx::state(key, init, draw)` now
   accepts an `FnOnce() -> T` initializer. Removed the eager-value overload and
   `state_with` alias; callers pass a closure or constructor. State keys, caller

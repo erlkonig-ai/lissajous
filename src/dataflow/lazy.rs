@@ -24,7 +24,10 @@ use crate::state::{ArcReadGuard, StateAccess, StateId};
 ///     let total = (left, right).map(expensive_calculation).memo("total");
 ///     nb.view(total.tap());
 ///     let label = total.map(|total| format!("Downstream: {total}"));
-///     nb.view(move |ctx| { ctx.label(label.read(ctx).as_str()); });
+///     nb.view(move |ctx| {
+///         let text = label.read(ctx);
+///         ctx.label(text.as_str());
+///     });
 /// }
 /// ```
 pub trait ReadValue {

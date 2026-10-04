@@ -191,7 +191,10 @@ fn totals(nb: &mut NotebookCtx, left: StateId<u32>, right: StateId<u32>) {
     // Inspect an intermediate using a normal view with Debug formatting.
     nb.view(total.tap());
     let label = total.map(|total| format!("Downstream: {total}"));
-    nb.view(move |ctx| { ctx.label(label.read(ctx).as_str()); });
+    nb.view(move |ctx| {
+        let text = label.read(ctx);
+        ctx.label(text.as_str());
+    });
 }
 ```
 
