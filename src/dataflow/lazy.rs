@@ -33,6 +33,23 @@ pub trait ReadValue {
             compute,
         }
     }
+
+    /// Render this value's `Debug` representation in a normal notebook view.
+    ///
+    /// `nb.view(value.tap())` reads only when the card draws, forcing this
+    /// recipe's dependencies but not downstream recipes. The callback owns the
+    /// recipe; copy it when `Copy`, or explicitly clone a cloneable recipe when
+    /// it is also needed elsewhere. This does not memoize an ordinary map.
+    fn tap(self) -> impl for<'a, 'b> FnMut(&'a mut crate::CardCtx<'b>) + 'static
+    where
+        Self: Sized + 'static,
+        Self::Value: std::fmt::Debug,
+    {
+        move |ctx| {
+            let text = format!("{:#?}", &*self.read(ctx));
+            ctx.monospace(text);
+        }
+    }
 }
 
 impl<T: Send + Sync + 'static> ReadValue for StateId<T> {

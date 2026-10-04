@@ -274,6 +274,48 @@ fn reading_an_intermediate_forces_only_its_prefix() {
 }
 
 #[test]
+#[cfg(not(target_arch = "wasm32"))]
+fn a_tap_is_lazy_and_draws_as_a_normal_view() {
+    use crate::{NotebookConfig, NotebookCore};
+    use std::rc::Rc;
+
+    let mut core = NotebookCore::new(NotebookConfig::new("tap-test"), Box::new(|_| {}));
+    let input = state(&Context(&core.state_store), "input", 2_u32);
+    let upstream_calls = Rc::new(Cell::new(0));
+    let downstream_calls = Cell::new(0);
+    let counter = upstream_calls.clone();
+    let total = input
+        .map(move |value| {
+            counter.set(counter.get() + 1);
+            value * 10
+        })
+        .memo("total");
+    // This captured recipe is Clone, not Copy. Owning it does not read it.
+    let tap = total.clone().tap();
+    assert_eq!(upstream_calls.get(), 0);
+    let mut notebook = core.build_notebook();
+    notebook.view(tap);
+    assert_eq!(notebook.cards.len(), 1);
+    assert_eq!(upstream_calls.get(), 0);
+    let downstream = total.map(|value| {
+        downstream_calls.set(downstream_calls.get() + 1);
+        value + 1
+    });
+    let ui = egui::Context::default();
+    for _ in 0..2 {
+        let output = ui.run(egui::RawInput::default(), |ctx| {
+            assert!(core.draw_card(ctx, &mut notebook, 0, 480.0).is_some());
+        });
+        assert!(!output.shapes.is_empty());
+    }
+    assert_eq!(upstream_calls.get(), 1);
+    assert_eq!(downstream_calls.get(), 0);
+    assert_eq!(*downstream.read(&notebook), 21);
+    assert_eq!(upstream_calls.get(), 1);
+    assert_eq!(downstream_calls.get(), 1);
+}
+
+#[test]
 fn a_panicking_map_invalidates_the_memo_and_does_not_poison_locks() {
     let store = StateStore::default();
     let ctx = Context(&store);

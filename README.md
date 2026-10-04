@@ -188,15 +188,18 @@ fn expensive_calculation(left: &u32, right: &u32) -> u32 {
 
 fn totals(nb: &mut NotebookCtx, left: StateId<u32>, right: StateId<u32>) {
     let total = (left, right).map(expensive_calculation).memo("total");
-    // Inspect an intermediate using the same view/read interface.
-    nb.view(move |ctx| { ctx.label(format!("Total: {}", total.read(ctx))); });
+    // Inspect an intermediate using a normal view with Debug formatting.
+    nb.view(total.tap());
     let label = total.map(|total| format!("Downstream: {total}"));
     nb.view(move |ctx| { ctx.label(label.read(ctx).as_str()); });
 }
 ```
 
 Reading the intermediate forces only its dependencies, not downstream recipes.
-The downstream read reuses `total`'s memoized result. Use a single handle's
+The downstream read reuses `total`'s memoized result. `.tap()` owns the recipe
+but reads only when its view draws; it adds no caching of its own. The named
+function recipe above is `Copy`; use `total.clone().tap()` for a non-`Copy`,
+cloneable recipe that you also want to consume downstream. Use a single handle's
 `.map(|value| ...)`, or tuples of one to eight readable inputs with separate
 borrowed arguments. Chains receive the final read's context throughout; handles
 and recipes retain no notebook context. Recipes are `Copy` when their inputs
