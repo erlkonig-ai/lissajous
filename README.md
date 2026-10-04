@@ -296,6 +296,8 @@ and hatched space measures replay; unknown totals hatch the whole rail.
 A one-point divider at an interior measured boundary shares the hatch colour
 and is painted behind the labels.
 Ready and replay need no label; opening, snapshot and failed remain visible.
+Ready with exactly matching known byte counts shows one size (including `0 B`);
+all other observations retain read/total, even when rounded values look equal.
 Byte labels use decimal units (GB), with exact byte counts and the full path on
 hover. `PileProgress::new(path, progress).error(error)` renders the same data-only
 face during a caller's preflight, without opening a resource. The instrument is

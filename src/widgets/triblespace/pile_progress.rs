@@ -347,11 +347,18 @@ fn rail_label(progress: Progress) -> String {
         Some(value) => format!("{:.1}", value as f64 / unit as f64),
         None => "?".into(),
     };
-    format!(
-        "{}/{} {suffix}",
-        value(progress.replayed),
-        value(progress.observed)
-    )
+    if matches!(
+        (progress.phase, progress.replayed, progress.observed),
+        (Phase::Ready, Some(done), Some(total)) if done == total
+    ) {
+        format!("{} {suffix}", value(progress.replayed))
+    } else {
+        format!(
+            "{}/{} {suffix}",
+            value(progress.replayed),
+            value(progress.observed)
+        )
+    }
 }
 
 #[cfg(test)]
@@ -491,11 +498,17 @@ mod tests {
             phase: Phase::Replay,
             ..Default::default()
         };
-        assert_eq!(rail_label(progress), "1.0/1.0 kB");
-        progress.phase = Phase::Snapshot;
-        assert_eq!(rail_label(progress), "1.0/1.0 kB");
+        for phase in [
+            Phase::Opening,
+            Phase::Replay,
+            Phase::Snapshot,
+            Phase::Failed,
+        ] {
+            progress.phase = phase;
+            assert_eq!(rail_label(progress), "1.0/1.0 kB");
+        }
         progress.phase = Phase::Ready;
-        assert_eq!(rail_label(progress), "1.0/1.0 kB");
+        assert_eq!(rail_label(progress), "1.0 kB");
         progress.observed = Some(2_000);
         assert_eq!(progress.pending_bytes(), Some(1_000));
         assert_eq!(progress.replay_fraction(), Some(0.5));
@@ -506,8 +519,30 @@ mod tests {
         progress.observed = Some(0);
         assert_eq!(progress.replay_fraction(), None);
         progress.replayed = Some(0);
-        assert_eq!(rail_label(progress), "0/0 B");
+        assert_eq!(rail_label(progress), "0 B");
         assert_eq!(progress.replay_fraction(), Some(1.0));
+    }
+
+    #[test]
+    fn ready_labels_require_exact_known_equality_before_shortening() {
+        for (replayed, observed, expected) in [
+            (None, None, "?/? B"),
+            (None, Some(1_000), "?/1.0 kB"),
+            (Some(1_000), None, "1.0/? kB"),
+            (Some(1_000), Some(1_001), "1.0/1.0 kB"),
+            (Some(1_001), Some(1_000), "1.0/1.0 kB"),
+            (Some(233_305_898_752), Some(233_305_898_752), "233.3 GB"),
+        ] {
+            assert_eq!(
+                rail_label(Progress {
+                    phase: Phase::Ready,
+                    replayed,
+                    observed,
+                    ..Default::default()
+                }),
+                expected
+            );
+        }
     }
 
     #[test]
