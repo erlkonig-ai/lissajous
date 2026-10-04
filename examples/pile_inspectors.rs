@@ -2,7 +2,8 @@
 //! All fixture I/O and collection inspection finish before notebook painting.
 //! The four cards receive narrow inputs and detach independently; there is no
 //! central mutable controller, collection catalogue, or live/private pile.
-//! Run with --headless --theme light --out-dir DIR [--width 320].
+//! Live cells fill the normal typographic grid with its native gutters.
+//! Capture with --headless --theme light --out-dir DIR [--span full|half|quarter].
 
 #[cfg(unix)]
 fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -23,13 +24,20 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut config = lissajous::NotebookConfig::new("Native pile inspectors");
     let mut headless = false;
     let mut output = std::path::PathBuf::from("pile_inspectors_capture");
-    let mut width = 320.0_f32;
+    let mut span = 12;
     let mut args = std::env::args().skip(1);
     while let Some(argument) = args.next() {
         match argument.as_str() {
             "--headless" => headless = true,
             "--out-dir" => output = args.next().ok_or("--out-dir needs a directory")?.into(),
-            "--width" => width = args.next().ok_or("--width needs points")?.parse()?,
+            "--span" => {
+                span = match args.next().as_deref() {
+                    Some("full") => 12,
+                    Some("half") => 6,
+                    Some("quarter") => 3,
+                    _ => return Err("--span expects full, half or quarter".into()),
+                }
+            }
             "--theme" => {
                 config = config.with_headless_theme(match args.next().as_deref() {
                     Some("light") => lissajous::HeadlessTheme::Light,
@@ -39,9 +47,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             }
             _ => return Err(format!("unknown argument: {argument}").into()),
         }
-    }
-    if !width.is_finite() || width < 16.0 {
-        return Err("--width must be finite and at least 16".into());
     }
     if headless {
         config = config.with_headless_capture(output);
@@ -69,7 +74,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     writer.commit(
         selected,
         &key,
-        entity! { metadata::name: "synthetic second" },
+        entity! {
+            metadata::name: "synthetic second",
+            metadata::description: "An extra native fact makes this selected member larger.",
+        },
     )?;
     // Deliberately prepare only one attachment. This is fixture construction,
     // not inspector-side maintenance or a fallback when an index is absent.
@@ -113,10 +121,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     config.run(move |nb| {
         let source = Arc::clone(&source);
-        nb.view(move |ctx| with_width(ctx, width, |ui| source.show(ui)));
+        nb.view(move |ctx| in_grid(ctx, span, |ui| source.show(ui)));
         let published = Arc::clone(&published);
         nb.view(move |ctx| {
-            with_width(ctx, width, |ui| {
+            in_grid(ctx, span, |ui| {
                 // The native-only constructor is equally valid here:
                 // SnapshotView::new(published.snapshot.as_ref()).
                 ui.add(SnapshotView::from_published(&published));
@@ -124,13 +132,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         });
         let inspected = Arc::clone(&inspected);
         nb.view(move |ctx| {
-            with_width(ctx, width, |ui| {
+            in_grid(ctx, span, |ui| {
                 ui.add(CollectionView::new(&inspected.1).name("synthetic"));
             })
         });
         let attached = Arc::clone(&attached);
         nb.view(move |ctx| {
-            with_width(ctx, width, |ui| {
+            in_grid(ctx, span, |ui| {
                 ui.add(CollectionView::new(&attached.1).name("synthetic index"));
             })
         });
@@ -142,17 +150,15 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 #[cfg(unix)]
-fn with_width(ctx: &mut lissajous::CardCtx, width: f32, draw: impl FnOnce(&mut egui::Ui)) {
-    let start = ctx.next_widget_position();
-    ctx.ui_mut().scope_builder(
-        egui::UiBuilder::new()
-            .max_rect(egui::Rect::from_min_size(start, egui::vec2(width, 0.0)))
-            .layout(egui::Layout::top_down(egui::Align::Min)),
-        |ui| {
-            ui.set_width(width);
-            draw(ui);
-        },
-    );
+fn in_grid(ctx: &mut lissajous::CardCtx, span: u32, draw: impl FnOnce(&mut egui::Ui)) {
+    ctx.grid(|g| {
+        let draw = |ctx: &mut lissajous::CardCtx| draw(ctx.ui_mut());
+        match span {
+            3 => g.quarter(draw),
+            6 => g.half(draw),
+            _ => g.full(draw),
+        }
+    });
 }
 
 #[cfg(not(unix))]
