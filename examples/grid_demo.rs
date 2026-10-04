@@ -19,7 +19,7 @@ Same spans → same pixel widths, every time, in every card."
     });
 
     // Demonstrate the flat grid with state access at depth.
-    let counter = nb.state("counter", 0u32, move |ctx, count| {
+    let counter = nb.state("counter", || 0u32, move |ctx, count| {
         ctx.grid(|g| {
             // Full-width heading
             g.full(|ctx| {
@@ -422,7 +422,7 @@ subtle visual tension that keeps the layout from feeling sterile."
     }
     nb.state(
         "widgets",
-        WidgetState {
+        || WidgetState {
             slider_val: 0.42,
             number_val: 3.14,
             toggle_on: false,

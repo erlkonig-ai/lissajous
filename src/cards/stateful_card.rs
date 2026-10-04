@@ -32,14 +32,14 @@ impl<T: Send + Sync + 'static> Card for StatefulCard<T> {
     }
 }
 
-/// Creates a card with persistent state keyed by `key`, initialized with `init`.
+/// Creates a card with persistent state keyed by `key`, lazily initialized by `init`.
 ///
 /// Returns a [`StateId`] handle that can be used to read the state from other cards.
 #[track_caller]
 pub fn stateful_card<K, T>(
     nb: &mut NotebookCtx,
     key: &K,
-    init: T,
+    init: impl FnOnce() -> T,
     function: impl for<'a, 'b> FnMut(&'a mut CardCtx<'b>, &mut T) + 'static,
 ) -> StateId<T>
 where

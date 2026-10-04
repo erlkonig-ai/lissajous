@@ -2549,7 +2549,7 @@ The first run can be slow while CubeCL builds shaders.
         );
     });
 
-    let config = nb.state("config", Config::default(), move |ui, config| {
+    let config = nb.state("config", Config::default, move |ui, config| {
         ui.with_padding(DEFAULT_CARD_PADDING, |ctx| {
             ctx.label("Batch configuration");
             ctx.checkbox(&mut config.auto_batch, "Adaptive batch size");
@@ -2653,7 +2653,7 @@ The first run can be slow while CubeCL builds shaders.
         });
     });
 
-    nb.state("minla", MinlaState::new(), move |ui, state| {
+    nb.state("minla", MinlaState::new, move |ui, state| {
         let graph = { config.read(ui).graph_data.clone() };
 
         state.sync_graph(&graph);
@@ -2812,7 +2812,7 @@ The first run can be slow while CubeCL builds shaders.
         }
     });
 
-    nb.state("anneal", AnnealState::new(), move |ui, state| {
+    nb.state("anneal", AnnealState::new, move |ui, state| {
         let (graph, target_ms) = {
             let config = config.read(ui);
             (config.graph_data.clone(), config.target_batch_ms)

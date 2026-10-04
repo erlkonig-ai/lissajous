@@ -6,7 +6,7 @@ use lissajous::prelude::*;
 #[notebook]
 fn main(nb: &mut NotebookCtx) {
     // A visible public-value card is useful here, not required for every output.
-    let selection = nb.state("selection", None::<u64>, |ctx, selected| {
+    let selection = nb.state("selection", || None::<u64>, |ctx, selected| {
         ctx.heading("Shared selection");
         ctx.label(format!("Selected entity: {selected:?}"));
         if ctx.button("Clear selection").clicked() {
@@ -21,7 +21,7 @@ fn main(nb: &mut NotebookCtx) {
 // This consumer could receive exactly the same input from a list selector.
 // It neither knows about nor locks the map's camera or prepared geometry.
 fn selection_summary(nb: &mut NotebookCtx, selection: StateId<Option<u64>>) {
-    nb.state_with(
+    nb.state(
         "selection-summary",
         DerivedState::<Option<u64>, String>::default,
         move |ctx, label| {
@@ -62,7 +62,7 @@ mod map {
     }
 
     pub(super) fn cell(nb: &mut NotebookCtx, selection: StateId<Option<u64>>) {
-        nb.state_with("geospatial-map", MapState::default, move |ctx, state| {
+        nb.state("geospatial-map", MapState::default, move |ctx, state| {
             ctx.heading("Located observations");
             ctx.label("Synthetic geometry · pan · wheel to zoom · click to select");
             let cyan = Color32::from_rgb(45, 185, 185);

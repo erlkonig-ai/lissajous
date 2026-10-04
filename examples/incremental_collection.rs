@@ -283,7 +283,7 @@ impl Demo {
 
 #[notebook]
 fn main(nb: &mut NotebookCtx) {
-    nb.state_with("incremental-collection", Demo::new, |ctx, state| {
+    nb.state("incremental-collection", Demo::new, |ctx, state| {
         ctx.with_padding(DEFAULT_CARD_PADDING, |ctx| match state {
             Err(error) => {
                 ctx.heading("Incremental collection");

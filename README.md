@@ -77,7 +77,7 @@ fn main(nb: &mut NotebookCtx) {
         md!(ctx, "# Lissajous\nA _minimalist_ notebook environment for **Rust**.");
     });
 
-    let slider = nb.state("slider", 0.5, |ctx, value| {
+    let slider = nb.state("slider", || 0.5, |ctx, value| {
         ctx.grid(|g| {
             g.two_thirds(|ctx| {
                 ctx.slider(value, 0.0..=1.0);
@@ -97,10 +97,13 @@ fn main(nb: &mut NotebookCtx) {
 
 Run it with `cargo run` to start the notebook.
 
-`nb.state` keeps the first value for a key, but its ordinary Rust argument is
-still evaluated before every call. Use `nb.state_with("key", || expensive(),
-|ctx, value| { /* ... */ })` when a resource should be constructed only while
-that state key is absent.
+`nb.state("key", || expensive(), |ctx, value| { /* ... */ })` invokes its
+initializer only while that state key is absent. Put construction inside the
+closure (or pass a constructor such as `Camera::default`), so rebuilding the
+notebook does not reconstruct a retained resource. There is no eager-value
+overload or `state_with` alias.
+This initializer-only signature is currently an unreleased source change;
+published 0.19.1 documentation still describes the earlier eager signature.
 
 For reload-on-change with Cargo, use:
 `watchexec -r -w src -w Cargo.toml -- cargo run`
@@ -116,11 +119,13 @@ the selected entity or area. A plot owns its axes, display options and pending
 series query; its input is the selection, not the map controller. Another
 selector should be able to supply that same input without rewriting the plot.
 
-Use `nb.state_with` for retained cell state, especially resources with nontrivial
-construction. Its initializer is lazy, not asynchronous: it runs only when the
-key is absent, but still runs on the calling thread. Starting a worker there can
-be appropriate; opening a large dataset or doing slow work there can still block
-the UI. The returned `StateId<T>` is a typed handle, not a subscription or a
+Use `nb.state` for retained cell state, especially resources with nontrivial
+construction. Its initializer is lazy, not asynchronous or dependency-reactive:
+it runs only when the key is absent, on the calling thread. Starting a worker
+there can be appropriate; opening a large dataset or doing slow work there can
+still block the UI. Do not read another `StateId` inside the initializer:
+insertion holds the state store's write lock. Read dependencies in the notebook
+body or draw callback instead. The returned `StateId<T>` is a typed handle, not a subscription or a
 read-only capability. Share handles deliberately, and read or copy only the
 inputs a consumer needs. Small copied outputs and narrow Rust interfaces are
 also useful; not every output needs its own visible card.
@@ -164,6 +169,12 @@ state ownership, inputs or resource lifetime.
 
 ### Choose recomputation explicitly
 
+An initializer does not rerun when another cell changes. A stateless `view`
+reads a `StateId` each paint; a stateful consumer can read the same handle while
+retaining its own axes, cache and pending tasks. Read or copy the input, release
+its guard, then decide what to recompute. The worked map example does exactly
+this: its summary owns `DerivedState`, whose key is the current selection.
+
 `DerivedState<K, T>::get(key, compute)` is a synchronous, single-current-key memo.
 Use it for inexpensive derivations, not heavy I/O or decoding on the paint path.
 Its key must account for every relevant input: selection, filter, source or
@@ -201,7 +212,7 @@ an in-memory dataset. Do not copy an entire source into a second application
 catalogue merely to connect cells. Keep slow acquisition and computation off
 paint, and preserve the source identity and authority relevant to each answer.
 
-API details: [`NotebookCtx::state_with`](https://docs.rs/lissajous/0.19.1/lissajous/struct.NotebookCtx.html#method.state_with),
+API details: [current source `NotebookCtx::state`](src/lib.rs),
 [`StateId`](https://docs.rs/lissajous/0.19.1/lissajous/state/struct.StateId.html),
 [`DerivedState`](https://docs.rs/lissajous/0.19.1/lissajous/dataflow/struct.DerivedState.html),
 and [`ComputedState`](https://docs.rs/lissajous/0.19.1/lissajous/dataflow/struct.ComputedState.html).

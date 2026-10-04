@@ -573,7 +573,7 @@ fn main(nb: &mut NotebookCtx) {
 
     let _palette_state = nb.state(
         "palette_state",
-        PaletteState::default(),
+        PaletteState::default,
         move |ctx, state| {
             ctx.with_padding(padding, |ctx| {
                 ctx.label(egui::RichText::new("RAL PICKER").monospace().strong());
@@ -662,7 +662,7 @@ fn main(nb: &mut NotebookCtx) {
 
     let widget_state = nb.state(
         "widget_state",
-        WidgetPlaybookState::default(),
+        WidgetPlaybookState::default,
         move |ctx, state| {
             ctx.with_padding(padding, |ctx| {
                 ctx.label(egui::RichText::new("BUTTONS").monospace().strong());

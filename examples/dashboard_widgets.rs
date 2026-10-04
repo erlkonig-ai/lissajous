@@ -53,7 +53,7 @@ fn main(nb: &mut NotebookCtx) {
     });
 
     // ── StreamLane ───────────────────────────────────────────────────
-    nb.state("lane", LaneState::default(), move |ctx, state| {
+    nb.state("lane", LaneState::default, move |ctx, state| {
         ctx.with_padding(padding, |ctx| {
             ctx.heading("StreamLane");
             let t = ctx.input(|i| i.time);
@@ -92,7 +92,7 @@ fn main(nb: &mut NotebookCtx) {
     // ── MetricStrip ──────────────────────────────────────────────────
     nb.state(
         "strip",
-        StripState {
+        || StripState {
             strip: MetricStrip::new("frame time", 600)
                 .suffix(" ms")
                 .percentile_band(true),
@@ -109,7 +109,7 @@ fn main(nb: &mut NotebookCtx) {
     );
 
     // ── EventFeed ────────────────────────────────────────────────────
-    nb.state("feed", FeedState::default(), move |ctx, state| {
+    nb.state("feed", FeedState::default, move |ctx, state| {
         ctx.with_padding(padding, |ctx| {
             ctx.heading("EventFeed");
             let t = ctx.input(|i| i.time);

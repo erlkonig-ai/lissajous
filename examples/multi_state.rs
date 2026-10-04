@@ -10,7 +10,7 @@ use lissajous::prelude::*;
 
 #[notebook]
 fn main(nb: &mut NotebookCtx) {
-    let left = nb.state("left", 2_i64, |ctx, value| {
+    let left = nb.state("left", || 2_i64, |ctx, value| {
         ctx.with_padding(DEFAULT_CARD_PADDING, |ctx| {
             ctx.label("Left counter");
             ctx.horizontal(|ctx| {
@@ -25,7 +25,7 @@ fn main(nb: &mut NotebookCtx) {
         });
     });
 
-    let right = nb.state("right", 5_i64, |ctx, value| {
+    let right = nb.state("right", || 5_i64, |ctx, value| {
         ctx.with_padding(DEFAULT_CARD_PADDING, |ctx| {
             ctx.label("Right counter");
             ctx.horizontal(|ctx| {

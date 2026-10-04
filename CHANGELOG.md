@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 
 ## Unreleased
 
+- **One lazy retained-state API.** `NotebookCtx::state(key, init, draw)` now
+  accepts an `FnOnce() -> T` initializer. Removed the eager-value overload and
+  `state_with` alias; callers pass a closure or constructor. State keys, caller
+  locations and retained-card identity are unchanged. Initialization is once
+  per absent key, not dependency reevaluation; consumers read dependencies
+  during composition or drawing and use existing derived/computed state.
 - Unix native pile resource cell behind `triblespace-pile`: retained read-only open
   and refresh, coalesced byte progress, and actual immutable snapshot output.
   Consumer queries remain independent. This source integration requires the

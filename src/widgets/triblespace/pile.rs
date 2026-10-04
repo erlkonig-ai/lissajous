@@ -1,6 +1,6 @@
 //! One retained, read-only pile, with native immutable snapshots as its output.
 //!
-//! Retain [`PileCell`] with [`crate::NotebookCtx::state_with`]. Construction
+//! Retain [`PileCell`] with [`crate::NotebookCtx::state`]. Construction
 //! starts an I/O owner; painting only reads its latest publication. Consumers
 //! clone [`Published::snapshot`] and own their own queries, tasks and answers.
 //! This resource never selects a collection, runs a query, fetches a missing

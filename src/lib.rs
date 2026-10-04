@@ -9,7 +9,7 @@
 //! This reactive composition is independent of immediate-mode rendering: card
 //! bodies run on repaint, while keyed state survives. Lissajous does not analyze
 //! source code or automatically schedule a dependency graph. Use
-//! [`NotebookCtx::state_with`] for lazy retained state, [`state::StateId`] for
+//! [`NotebookCtx::state`] for lazy retained state, [`state::StateId`] for
 //! explicit typed access, and [`dataflow::DerivedState`] for small synchronous
 //! derivations keyed by all relevant inputs. [`dataflow::ComputedState`] supplies
 //! a native background result slot, not keyed cancellation or latest-request
@@ -676,39 +676,22 @@ impl NotebookCtx {
         self.push_with_source(Box::new(card), Some(source), identity);
     }
 
-    /// Adds a stateful card backed by a value of type `T` in the shared state store.
-    ///
-    /// The first value passed for this state key is retained across frames.
-    /// Like every ordinary function argument, `init` is evaluated before this
-    /// method is called, even when the state already exists. Use
-    /// [`state_with`](Self::state_with) when construction should happen only
-    /// for an absent key.
-    ///
-    /// Returns a [`StateId`](state::StateId) handle for reading/writing the
-    /// state from other cards.
-    #[track_caller]
-    pub fn state<K, T, F>(&mut self, key: &K, init: T, function: F) -> state::StateId<T>
-    where
-        K: std::hash::Hash + ?Sized,
-        T: Send + Sync + 'static,
-        F: for<'a, 'b> FnMut(&'a mut CardCtx<'b>, &mut T) + 'static,
-    {
-        self.state_with(key, || init, function)
-    }
-
     /// Adds a stateful card, constructing its value only when the key is absent.
     ///
     /// `init` runs only while the state key is absent. Once it returns,
     /// subsequent frames rebuild the card around the existing value without
     /// invoking the initializer. If initialization panics, no state is
     /// installed and a later call may retry.
+    /// Initialization is synchronous, not a dependency computation. Read
+    /// other state in the notebook body or draw callback, not in `init`:
+    /// insertion holds the state store's write lock while invoking it.
     ///
     /// Returns a [`StateId`](state::StateId) handle for reading/writing the
     /// state from other cards.
     /// Prefer exposing useful values or narrow interfaces over passing a whole
     /// application controller; see the [crate-level authoring guide](crate).
     #[track_caller]
-    pub fn state_with<K, T, I, F>(&mut self, key: &K, init: I, function: F) -> state::StateId<T>
+    pub fn state<K, T, I, F>(&mut self, key: &K, init: I, function: F) -> state::StateId<T>
     where
         K: std::hash::Hash + ?Sized,
         T: Send + Sync + 'static,
@@ -1504,13 +1487,13 @@ mod notebook_state_tests {
     use super::*;
 
     #[test]
-    fn state_with_initializes_once_across_notebook_rebuilds() {
+    fn state_initializes_once_across_notebook_rebuilds() {
         let mut core = NotebookCore::new(NotebookConfig::new("lazy-state-test"), Box::new(|_| {}));
         let initializations = Cell::new(0);
 
         let first = {
             let mut notebook = core.build_notebook();
-            notebook.state_with(
+            notebook.state(
                 &"shared",
                 || {
                     initializations.set(initializations.get() + 1);
@@ -1521,7 +1504,7 @@ mod notebook_state_tests {
         };
         let (second, value) = {
             let mut notebook = core.build_notebook();
-            let state = notebook.state_with(
+            let state = notebook.state(
                 &"shared",
                 || {
                     initializations.set(initializations.get() + 1);
@@ -1539,27 +1522,79 @@ mod notebook_state_tests {
     }
 
     #[test]
-    fn state_keeps_its_eager_value_api() {
-        let mut core = NotebookCore::new(NotebookConfig::new("eager-state-test"), Box::new(|_| {}));
-        let evaluations = Cell::new(0);
-        let evaluated = |value| {
-            evaluations.set(evaluations.get() + 1);
-            value
-        };
-
-        let first = {
+    fn state_retains_a_non_copy_resource_from_a_consuming_initializer() {
+        struct Resource { text: String }
+        let mut core = NotebookCore::new(NotebookConfig::new("resource-state-test"), Box::new(|_| {}));
+        let initializations = Cell::new(0);
+        let mut previous = None;
+        for label in ["first", "must not replace"] {
+            let owned = Box::new(label.to_owned());
+            let count = &initializations;
             let mut notebook = core.build_notebook();
-            notebook.state(&"shared", evaluated(41_u32), |_, _| {})
-        };
-        let (second, value) = {
-            let mut notebook = core.build_notebook();
-            let state = notebook.state(&"shared", evaluated(99_u32), |_, _| {});
-            let value = *state.read(&notebook);
-            (state, value)
-        };
+            let state = notebook.state("resource", move || {
+                count.set(count.get() + 1);
+                Resource { text: *owned }
+            }, |_, _| {});
+            if let Some(previous) = previous { assert_eq!(state.id(), previous); }
+            else { state.read_mut(&notebook).text.push_str(" retained"); }
+            previous = Some(state.id());
+            assert_eq!(state.read(&notebook).text, "first retained");
+        }
+        assert_eq!(initializations.get(), 1);
+    }
 
+    #[test]
+    fn state_keys_are_independent_and_type_mismatch_does_not_initialize() {
+        let mut core = NotebookCore::new(NotebookConfig::new("key-state-test"), Box::new(|_| {}));
+        let mut notebook = core.build_notebook();
+        let left = notebook.state("left", || 41_u32, |_, _| {});
+        let right = notebook.state("right", || String::from("other type"), |_, _| {});
+        assert_ne!(left.id(), right.id());
+        assert_eq!(*left.read(&notebook), 41);
+        assert_eq!(right.read(&notebook).as_str(), "other type");
+        let initialized = Cell::new(false);
+        let failure = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            notebook.state("left", || { initialized.set(true); String::new() }, |_, _| {});
+        }));
+        assert!(failure.is_err());
+        assert!(!initialized.get());
+        assert_eq!(*left.read(&notebook), 41);
+    }
+
+    #[test]
+    fn state_preserves_caller_location_and_card_identity_across_rebuilds() {
+        fn draw(_: &mut CardCtx<'_>, _: &mut String) {}
+        fn declare(notebook: &mut NotebookCtx, init: impl FnOnce() -> String) -> (state::StateId<String>, u32) {
+            let line = line!() + 1;
+            let state = notebook.state("stable", init, draw);
+            (state, line)
+        }
+        let mut core = NotebookCore::new(NotebookConfig::new("identity-state-test"), Box::new(|_| {}));
+        let (first, source, identity) = {
+            let mut notebook = core.build_notebook();
+            let (state, line) = declare(&mut notebook, || String::from("retained"));
+            let source = notebook.cards[0].source.clone().unwrap();
+            assert_eq!(source.file, file!());
+            assert_eq!(source.line, line);
+            (state, source, notebook.cards[0].identity)
+        };
+        let mut notebook = core.build_notebook();
+        let (second, _) = declare(&mut notebook, || panic!("existing key must not initialize"));
         assert_eq!(first, second);
-        assert_eq!(value, 41);
-        assert_eq!(evaluations.get(), 2);
+        assert_eq!(notebook.cards[0].source.as_ref(), Some(&source));
+        assert_eq!(notebook.cards[0].identity, identity);
+        assert_eq!(second.read(&notebook).as_str(), "retained");
+    }
+
+    #[test]
+    fn stateful_card_helper_is_lazy_and_forwards_the_call_site() {
+        let mut core = NotebookCore::new(NotebookConfig::new("helper-state-test"), Box::new(|_| {}));
+        let mut notebook = core.build_notebook();
+        let line = line!() + 1;
+        let first = cards::stateful_card(&mut notebook, "shared", || String::from("first"), |_, _| {});
+        assert_eq!(notebook.cards[0].source.as_ref().unwrap().line, line);
+        let second = cards::stateful_card(&mut notebook, "shared", || panic!("not lazy"), |_, _: &mut String| {});
+        assert_eq!(first, second);
+        assert_eq!(first.read(&notebook).as_str(), "first");
     }
 }

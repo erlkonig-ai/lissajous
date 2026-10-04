@@ -85,7 +85,7 @@ fn fluid_snapshot() -> PhysicsScene {
 #[notebook]
 fn main(nb: &mut NotebookCtx) {
     let scene = geometry();
-    nb.state("geometry-camera", PhysicsView::default().height(340.0), move |ctx, camera| {
+    nb.state("geometry-camera", || PhysicsView::default().height(340.0), move |ctx, camera| {
         ctx.heading("Physics scene viewer");
         ctx.label("The camera is interactive; snapshots are read-only. Axes and scale use the caller's declared units.");
         camera.show(ctx, &scene);
@@ -104,7 +104,7 @@ fn main(nb: &mut NotebookCtx) {
             scene
         };
         // Keep the same envelope regardless of which optional adapters are used.
-        let view = PhysicsView::default().height(420.0).bounds(Bounds3 {
+        let view = || PhysicsView::default().height(420.0).bounds(Bounds3 {
             min: [-1.0, -0.7, -0.7],
             max: [1.5, 1.3, 0.7],
         });

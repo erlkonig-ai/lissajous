@@ -68,7 +68,7 @@ Praesent sodales eu felis sed vehicula. Donec condimentum efficitur sodales.
         );
     });
 
-    let slider = nb.state("slider", 0.5, move |ctx, value: &mut f32| {
+    let slider = nb.state("slider", || 0.5, move |ctx, value: &mut f32| {
         ctx.with_padding(padding, |ctx| {
             ctx.add(widgets::Slider::new(value, 0.0..=1.0).text("input"));
         });
@@ -76,7 +76,7 @@ Praesent sodales eu felis sed vehicula. Donec condimentum efficitur sodales.
 
     let _progress = nb.state(
         "progress",
-        ComputedState::<f32>::default(),
+        ComputedState::<f32>::default,
         move |ctx, value| {
             let slider = *slider.read(ctx);
             ctx.with_padding(padding, |ctx| {

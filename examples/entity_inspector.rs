@@ -320,7 +320,7 @@ fn main(nb: &mut NotebookCtx) {
     let name_cache: BlobCache<_, UTF8String, View<str>> = BlobCache::new(reader);
     let inspector = nb.state(
         "inspector",
-        InspectorState {
+        || InspectorState {
             selected: default_selected,
             columns: 0,
             node_count: 0,

@@ -10,7 +10,7 @@ use lissajous::prelude::*;
 fn main(nb: &mut NotebookCtx) {
     use lissajous::widgets::triblespace::pile::{PileCell, PileOpen};
 
-    let source = nb.state_with(
+    let source = nb.state(
         "pile-resource",
         || {
             let path = std::env::var_os("LISSAJOUS_PILE")

@@ -20,7 +20,7 @@ fn main(nb: &mut NotebookCtx) {
 In this notebook we're going to use huggingfaces `candle` crate, to create a simple prompt based chatbot."
         );
     });
-    let _prompt = nb.state("prompt", "", move |ctx, value| {
+    let _prompt = nb.state("prompt", || "", move |ctx, value| {
         ctx.with_padding(padding, |ctx| {
             ctx.horizontal(|ctx| {
                 ctx.label("Prompt:");

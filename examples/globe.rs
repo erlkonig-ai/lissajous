@@ -46,7 +46,7 @@ impl Default for Camera {
 
 #[notebook]
 fn main(nb: &mut NotebookCtx) {
-    nb.state("globe", Camera::default(), |ctx, cam| {
+    nb.state("globe", Camera::default, |ctx, cam| {
         ctx.section("Globe", |ctx| {
             // The colour-target format egui is rendering into — needed
             // to build a pipeline whose output matches egui's pass.

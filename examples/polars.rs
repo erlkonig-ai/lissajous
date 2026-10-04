@@ -36,7 +36,7 @@ In this notebook we're going to use the `polars` crate to create a simple datafr
     });
     let df_state = nb.state(
         "dataframe",
-        ComputedState::<Option<DataFrame>>::default(),
+        ComputedState::<Option<DataFrame>>::default,
         move |ui, value| {
             ui.with_padding(summary_padding, |ctx| {
                 md!(ctx, "*Overview*: row/column counts for quick context.");
@@ -58,7 +58,7 @@ In this notebook we're going to use the `polars` crate to create a simple datafr
 
     let view_state = nb.state(
         "dataframe_view_response",
-        Ok(DataFrame::default()),
+        || Ok(DataFrame::default()),
         move |ui, view_state| {
             let Some(state) = df_state.try_read(ui) else {
                 return;
