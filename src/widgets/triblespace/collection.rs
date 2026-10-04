@@ -23,8 +23,9 @@ pub struct SupportInfo {
 /// One contiguous group in the cover's native canonical member order.
 ///
 /// This is direct member-byte composition, never foundational support. At most
-/// 32 groups are retained: the first 31 members individually, then the remainder
-/// as one group. Empty members count even though their segment has zero width.
+/// 32 groups are retained, each with ceil(member count / 32) consecutive members
+/// except the possibly shorter last group. Empty members count even though their
+/// segment has zero width.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ByteSegment {
     pub members: usize,
@@ -162,7 +163,8 @@ fn direct_bytes<R: BlobStoreMeta, E: CollectionEncoding>(
 ) -> Result<(u64, Vec<ByteSegment>), String> {
     let mut sum = 0_u64;
     let mut segments: Vec<ByteSegment> = Vec::new();
-    for member in cover.members() {
+    let group_size = cover.len().div_ceil(32).max(1);
+    for (index, member) in cover.members().enumerate() {
         let metadata = snapshot
             .metadata(member)
             .map_err(|error| {
@@ -175,7 +177,7 @@ fn direct_bytes<R: BlobStoreMeta, E: CollectionEncoding>(
         sum = sum
             .checked_add(metadata.length)
             .ok_or_else(|| "direct cover-member byte total exceeds u64".to_owned())?;
-        if segments.len() < 32 {
+        if index % group_size == 0 {
             segments.push(ByteSegment {
                 members: 1,
                 bytes: metadata.length,
@@ -229,6 +231,8 @@ impl egui::Widget for CollectionView<'_> {
         let weak = ui.visuals().weak_text_color();
         let text = ui.visuals().text_color();
         let error = ui.visuals().error_fg_color;
+        let dark = ui.visuals().dark_mode;
+        let byte_tones = if dark { [0.30, 0.48] } else { [0.10, 0.20] };
         let failed = self.info.direct_bytes.is_err()
             || self.info.support.as_ref().is_some_and(Result::is_err);
         let inner = rail.shrink(1.0);
@@ -244,14 +248,10 @@ impl egui::Widget for CollectionView<'_> {
                     egui::pos2(start, inner.top()),
                     egui::pos2(end, inner.bottom()),
                 );
-                painter.rect_filled(
-                    segment,
-                    0.0,
-                    weak.gamma_multiply(if index % 2 == 0 { 0.10 } else { 0.20 }),
-                );
+                painter.rect_filled(segment, 0.0, weak.gamma_multiply(byte_tones[index % 2]));
                 if ui.rect_contains_pointer(segment) {
                     detail.push_str(&format!(
-                        "\nCanonical member group {first_member}–{}: {} members, {} bytes ({:.1}% of direct bytes).\nGroups are contiguous in native cover order; the last may aggregate members.",
+                        "\nCanonical member group {first_member}–{}: {} members, {} bytes ({:.1}% of direct bytes).\nGroups contain consecutive native cover members of approximately equal count.",
                         first_member + group.members - 1,
                         group.members,
                         group.bytes,
@@ -355,13 +355,25 @@ impl egui::Widget for CollectionView<'_> {
                                 egui::pos2(boundary, inner.bottom()),
                             ),
                             0.0,
-                            weak.gamma_multiply(0.20),
+                            weak.gamma_multiply(if dark { 0.40 } else { 0.20 }),
                         );
                         painter.rect_filled(
                             egui::Rect::from_min_max(egui::pos2(boundary, inner.top()), inner.max),
                             0.0,
-                            weak.gamma_multiply(0.04),
+                            weak.gamma_multiply(if dark { 0.08 } else { 0.04 }),
                         );
+                        if fraction > 0.0 && fraction < 1.0 {
+                            painter.line_segment(
+                                [
+                                    egui::pos2(boundary, inner.top()),
+                                    egui::pos2(boundary, inner.bottom()),
+                                ],
+                                egui::Stroke::new(
+                                    1.0,
+                                    weak.gamma_multiply(if dark { 0.60 } else { 0.35 }),
+                                ),
+                            );
+                        }
                     }
                     (
                         parent.display(),
@@ -715,7 +727,7 @@ mod tests {
         let root = store
             .collection("inspection-byte-groups", policy())
             .unwrap();
-        let members: Vec<_> = (0..70)
+        let members: Vec<_> = (0..1000)
             .map(|index| {
                 let blob: Blob<SimpleArchive> =
                     entity! { metadata::name: format!("member-{index}") }
@@ -724,38 +736,50 @@ mod tests {
                 blob.get_handle()
             })
             .collect();
-        let cover = root.cover(members);
-        let info = CollectionInfo::observe_cover(&MetadataOnly(Some(7), false), &cover);
-        assert_eq!(info.members, 70);
-        assert_eq!(info.direct_bytes, Ok(490));
-        assert_eq!(info.byte_segments.len(), 32);
-        assert!(info.byte_segments[..31].iter().all(|segment| *segment
-            == ByteSegment {
-                members: 1,
-                bytes: 7
-            }));
-        assert_eq!(
-            info.byte_segments[31],
-            ByteSegment {
-                members: 39,
-                bytes: 273
+        for (count, expected_groups, group_size) in [(70_usize, 24, 3_usize), (1000, 32, 32)] {
+            let cover = root.cover(members[..count].iter().copied());
+            let info = CollectionInfo::observe_cover(&MetadataOnly(Some(7), false), &cover);
+            let total = count as u64 * 7;
+            assert_eq!(info.members, count);
+            assert_eq!(info.direct_bytes, Ok(total));
+            assert_eq!(info.byte_segments.len(), expected_groups);
+            assert!(info.byte_segments.len() <= 32);
+            for (index, group) in info.byte_segments.iter().enumerate() {
+                let expected_members = group_size.min(count - index * group_size);
+                assert_eq!(group.members, expected_members);
+                assert_eq!(group.bytes, expected_members as u64 * 7);
+                assert!(group.members <= group_size); // No oversized tail.
             }
-        );
-        assert_eq!(byte_distribution(&info).unwrap().0, 490);
-        assert_eq!(info.support, None); // Bytes never manufacture support.
-        let zero = CollectionInfo::observe_cover(&MetadataOnly(Some(0), false), &cover);
-        assert_eq!(zero.direct_bytes, Ok(0));
-        assert_eq!(
-            zero.byte_segments
-                .iter()
-                .map(|group| group.members)
-                .sum::<usize>(),
-            70
-        );
-        assert!(byte_distribution(&zero).is_none());
-        let missing = CollectionInfo::observe_cover(&MetadataOnly(None, false), &cover);
-        assert!(missing.byte_segments.is_empty());
-        assert!(byte_distribution(&missing).is_none());
+            assert_eq!(
+                info.byte_segments
+                    .iter()
+                    .map(|group| group.members)
+                    .sum::<usize>(),
+                count
+            );
+            assert_eq!(
+                info.byte_segments
+                    .iter()
+                    .map(|group| group.bytes)
+                    .sum::<u64>(),
+                total
+            );
+            assert_eq!(byte_distribution(&info).unwrap().0, total);
+            assert_eq!(info.support, None); // Bytes never manufacture support.
+            let zero = CollectionInfo::observe_cover(&MetadataOnly(Some(0), false), &cover);
+            assert_eq!(zero.direct_bytes, Ok(0));
+            assert_eq!(
+                zero.byte_segments
+                    .iter()
+                    .map(|group| group.members)
+                    .sum::<usize>(),
+                count
+            );
+            assert!(byte_distribution(&zero).is_none());
+            let missing = CollectionInfo::observe_cover(&MetadataOnly(None, false), &cover);
+            assert!(missing.byte_segments.is_empty());
+            assert!(byte_distribution(&missing).is_none());
+        }
     }
 
     #[test]
