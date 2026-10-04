@@ -133,7 +133,7 @@ impl egui::Widget for PileProgress<'_> {
         painter.rect_stroke(rail, 0.0, Stroke::new(1.0, stroke), StrokeKind::Inside);
         let inner = rail.shrink(2.0);
         let right = inner.right() - 4.0;
-        let active = self.progress.phase != Phase::Ready;
+        let active = !matches!(self.progress.phase, Phase::Ready | Phase::Replay);
         let amount =
             painter.layout_no_wrap(rail_label(self.progress), FontId::monospace(10.0), text);
         let amount_rect = egui::Rect::from_min_size(
@@ -179,9 +179,9 @@ impl egui::Widget for PileProgress<'_> {
             path.size(),
         );
         let fraction = self.progress.replay_fraction();
-        let watermark = fraction.map(|fraction| inner.left() + inner.width() * fraction);
+        let boundary = fraction.map(|fraction| inner.left() + inner.width() * fraction);
         let unread = egui::Rect::from_min_max(
-            pos2(watermark.unwrap_or(inner.left()), inner.top()),
+            pos2(boundary.unwrap_or(inner.left()), inner.top()),
             inner.max,
         );
         if unread.width() > 0.0 {
@@ -196,6 +196,31 @@ impl egui::Widget for PileProgress<'_> {
                     Stroke::new(0.75, weak.gamma_multiply(0.18)),
                 );
                 x += 8.0;
+            }
+        }
+        if let Some(x) = boundary.filter(|x| *x > inner.left() && *x < inner.right()) {
+            // One outline-weight divider, interrupted only where it would
+            // strike a label. No extra marker at full/empty/unknown bounds.
+            let covered = [
+                Some(path_rect),
+                Some(amount_rect),
+                phase.as_ref().map(|(rect, _)| *rect),
+            ]
+            .into_iter()
+            .flatten()
+            .map(|rect| rect.expand(1.0))
+            .filter(|rect| x >= rect.left() && x <= rect.right())
+            .reduce(|a, b| a.union(b));
+            let paint = |top: f32, bottom: f32| {
+                if top < bottom {
+                    painter.line_segment([pos2(x, top), pos2(x, bottom)], Stroke::new(1.0, stroke));
+                }
+            };
+            if let Some(covered) = covered {
+                paint(inner.top(), covered.top().max(inner.top()));
+                paint(covered.bottom().min(inner.bottom()), inner.bottom());
+            } else {
+                paint(inner.top(), inner.bottom());
             }
         }
         let content = painter.with_clip_rect(inner.intersect(painter.clip_rect()));
@@ -718,6 +743,7 @@ mod tests {
                     })
                     .collect();
                 assert!(labels.iter().all(|(text, bounds)| !text.contains("ready")
+                    && !text.contains("replay")
                     && !text.contains('↻')
                     && rail.contains_rect(*bounds)));
                 let (_, path) = labels
@@ -731,16 +757,27 @@ mod tests {
                 assert!(path.right() < bytes.left());
                 assert_eq!(
                     labels.iter().any(|(text, _)| *text == phase_label(phase)),
-                    phase != Phase::Ready
+                    !matches!(phase, Phase::Ready | Phase::Replay)
                 );
+                for shape in &output.shapes {
+                    if let egui::Shape::LineSegment { points, .. } = shape.shape {
+                        if points[0].x == points[1].x {
+                            assert!(labels.iter().all(|(_, bounds)| points[0].x < bounds.left()
+                                || points[0].x > bounds.right()
+                                || points[1].y <= bounds.top()
+                                || points[0].y >= bounds.bottom()));
+                        }
+                    }
+                }
             }
         }
     }
 
     #[test]
-    fn hatch_boundary_uses_actual_bytes_without_an_extra_tick() {
+    fn hatch_boundary_and_outline_weight_separator_use_actual_bytes() {
         for (replayed, observed, left) in [
             (Some(100), Some(200), Some(160.0)),
+            (Some(0), Some(200), Some(2.0)),
             (None, None, Some(2.0)),
             (Some(200), Some(100), Some(2.0)),
             (Some(0), Some(0), None),
@@ -767,16 +804,32 @@ mod tests {
                     ));
                 },
             );
+            let outline = output
+                .shapes
+                .iter()
+                .find_map(|shape| match &shape.shape {
+                    egui::Shape::Rect(rect) => Some(rect.stroke),
+                    _ => None,
+                })
+                .expect("rail outline");
             let mut lines = 0;
+            let mut separators = 0;
             for clipped in &output.shapes {
-                if let egui::Shape::LineSegment { points, .. } = clipped.shape {
+                if let egui::Shape::LineSegment { points, stroke } = clipped.shape {
+                    if points[0].x == points[1].x {
+                        separators += 1;
+                        assert_eq!(Some(points[0].x), left);
+                        assert_eq!(stroke, outline);
+                        assert_eq!(stroke.width, 1.0);
+                        continue;
+                    }
                     lines += 1;
-                    assert_ne!(points[0].x, points[1].x, "no separate vertical tick");
                     assert_ne!(points[0].y, points[1].y, "diagonal hatching only");
                     assert_eq!(Some(clipped.clip_rect.left()), left);
                 }
             }
             assert_eq!(lines > 0, left.is_some());
+            assert_eq!(separators > 0, left.is_some_and(|left| left > 2.0));
         }
     }
 }

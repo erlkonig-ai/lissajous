@@ -293,8 +293,8 @@ detaching a card does not reopen its pile.
 The compact face shows the configured path on the left and measured bytes on
 the right, inside one square-cornered 28-point rail. The boundary between plain
 and hatched space measures replay; unknown totals hatch the whole rail.
-There is no separate watermark stroke. Ready needs no label;
-opening, replay, snapshot and failed remain visible inside the rail.
+A thin divider at an interior measured boundary matches the rail outline.
+Ready and replay need no label; opening, snapshot and failed remain visible.
 Byte labels use decimal units (GB), with exact byte counts and the full path on
 hover. `PileProgress::new(path, progress).error(error)` renders the same data-only
 face during a caller's preflight, without opening a resource. The instrument is
