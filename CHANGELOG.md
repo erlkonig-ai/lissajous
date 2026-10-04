@@ -5,7 +5,8 @@ All notable changes to this project will be documented in this file.
 ## Unreleased
 
 - Compact native pile instrument: configured path and measured bytes inside one
-  28-point rail, with a replay watermark; no ready label or refresh button.
+  square-cornered 28-point rail, with a measured hatched unread tail; no extra
+  watermark stroke, ready label or refresh button.
   Automatic snapshot publication is unchanged. Public data-only `PileProgress`
   also serves preflight/error faces without implying snapshot readiness.
 - Lazy single-input and tuple `.map` expressions share `.read(ctx)` with state

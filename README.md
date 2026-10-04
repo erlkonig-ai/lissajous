@@ -291,8 +291,9 @@ to consumers, not this cell. Share one cell for consumers of the same source;
 detaching a card does not reopen its pile.
 
 The compact face shows the configured path on the left and measured bytes on
-the right, inside one 28-point rail. The replay-watermark tick and hatched unread
-or unknown space are measured, not simulated progress. Ready needs no label;
+the right, inside one square-cornered 28-point rail. The boundary between plain
+and hatched space measures replay; unknown totals hatch the whole rail.
+There is no separate watermark stroke. Ready needs no label;
 opening, replay, snapshot and failed remain visible inside the rail.
 Byte labels use decimal units (GB), with exact byte counts and the full path on
 hover. `PileProgress::new(path, progress).error(error)` renders the same data-only

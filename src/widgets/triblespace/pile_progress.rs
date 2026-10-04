@@ -93,7 +93,7 @@ pub fn replay_batch<E>(
 
 /// Data-only face of a pile resource. No file is opened or read here.
 ///
-/// The tick measures replayed bytes, not snapshot readiness. This is a
+/// The hatch boundary measures replayed bytes, not snapshot readiness. This is a
 /// hover-only instrument; the resource publishes automatically. Errors stay
 /// visible below the rail, and exact path/byte information stays on hover.
 pub struct PileProgress<'a> {
@@ -198,14 +198,6 @@ impl egui::Widget for PileProgress<'_> {
                 x += 8.0;
             }
         }
-        if let Some(x) = watermark {
-            let tick = Stroke::new(2.0, if failed { stroke } else { text });
-            let mut labels = vec![path_rect, amount_rect];
-            labels.extend(phase.as_ref().map(|(rect, _)| *rect));
-            for (top, bottom) in tick_spans(inner, x, &labels) {
-                painter.line_segment([pos2(x, top), pos2(x, bottom)], tick);
-            }
-        }
         let content = painter.with_clip_rect(inner.intersect(painter.clip_rect()));
         content.galley(path_rect.min, path, weak);
         content.galley(amount_rect.min, amount, text);
@@ -241,28 +233,6 @@ impl egui::Widget for PileProgress<'_> {
         }
         response
     }
-}
-
-fn tick_spans(inner: egui::Rect, x: f32, labels: &[egui::Rect]) -> Vec<(f32, f32)> {
-    let mut blocked: Vec<_> = labels
-        .iter()
-        .map(|rect| rect.expand(1.0))
-        .filter(|rect| x >= rect.left() && x <= rect.right())
-        .collect();
-    blocked.sort_by(|a, b| a.top().total_cmp(&b.top()));
-    let mut spans = Vec::new();
-    let mut top = inner.top();
-    for rect in blocked {
-        let bottom = rect.top().min(inner.bottom());
-        if top < bottom {
-            spans.push((top, bottom));
-        }
-        top = top.max(rect.bottom());
-    }
-    if top < inner.bottom() {
-        spans.push((top, inner.bottom()));
-    }
-    spans
 }
 
 fn middle_elide(text: &str, width: f32, measure: impl Fn(&str) -> f32) -> String {
@@ -768,23 +738,45 @@ mod tests {
     }
 
     #[test]
-    fn tick_keeps_its_position_without_striking_either_label() {
-        use egui::{pos2, Rect};
-        let inner = Rect::from_min_max(pos2(2.0, 2.0), pos2(178.0, 26.0));
-        let path = Rect::from_min_max(pos2(6.0, 9.0), pos2(80.0, 19.0));
-        let bytes = Rect::from_min_max(pos2(88.0, 4.0), pos2(174.0, 14.0));
-        let phase = Rect::from_min_max(pos2(136.0, 16.0), pos2(174.0, 24.0));
-        for x in [2.0, 50.0, 90.0, 150.0, 178.0] {
-            let labels = [path, bytes, phase];
-            let spans = tick_spans(inner, x, &labels);
-            assert!(!spans.is_empty());
-            for (top, bottom) in spans {
-                assert!(top >= inner.top() && top < bottom && bottom <= inner.bottom());
-                assert!(labels.iter().all(|label| x < label.left()
-                    || x > label.right()
-                    || bottom <= label.top()
-                    || top >= label.bottom()));
+    fn hatch_boundary_uses_actual_bytes_without_an_extra_tick() {
+        for (replayed, observed, left) in [
+            (Some(100), Some(200), Some(160.0)),
+            (None, None, Some(2.0)),
+            (Some(200), Some(100), Some(2.0)),
+            (Some(0), Some(0), None),
+            (Some(200), Some(200), None),
+        ] {
+            let context = egui::Context::default();
+            let output = context.run_ui(
+                egui::RawInput {
+                    screen_rect: Some(egui::Rect::from_min_size(
+                        egui::Pos2::ZERO,
+                        egui::vec2(320.0, 200.0),
+                    )),
+                    ..Default::default()
+                },
+                |ui| {
+                    ui.add(PileProgress::new(
+                        Path::new("/public/project.pile"),
+                        Progress {
+                            phase: Phase::Ready,
+                            replayed,
+                            observed,
+                            ..Default::default()
+                        },
+                    ));
+                },
+            );
+            let mut lines = 0;
+            for clipped in &output.shapes {
+                if let egui::Shape::LineSegment { points, .. } = clipped.shape {
+                    lines += 1;
+                    assert_ne!(points[0].x, points[1].x, "no separate vertical tick");
+                    assert_ne!(points[0].y, points[1].y, "diagonal hatching only");
+                    assert_eq!(Some(clipped.clip_rect.left()), left);
+                }
             }
+            assert_eq!(lines > 0, left.is_some());
         }
     }
 }
