@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 
 ## Unreleased
 
+- Unix native pile resource cell behind `triblespace`: retained read-only open
+  and refresh, coalesced byte progress, and actual immutable snapshot output.
+  Consumer queries remain independent. This source integration requires the
+  unpublished Core `refresh_next` API; no registry compatibility or release is
+  implied by the existing dependency version.
+
 ## 0.19.1 - 2026-10-03
 
 - Borrowed geospatial `MapView` with persistent camera and opaque caller-owned

@@ -170,6 +170,10 @@ name = "incremental_collection"
 required-features = ["triblespace"]
 
 [[example]]
+name = "pile_resource"
+required-features = ["triblespace"]
+
+[[example]]
 name = "minla"
 required-features = ["cubecl", "plots"]
 

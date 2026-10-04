@@ -206,6 +206,45 @@ API details: [`NotebookCtx::state_with`](https://docs.rs/lissajous/0.19.1/lissaj
 [`DerivedState`](https://docs.rs/lissajous/0.19.1/lissajous/dataflow/struct.DerivedState.html),
 and [`ComputedState`](https://docs.rs/lissajous/0.19.1/lissajous/dataflow/struct.ComputedState.html).
 
+### Native pile resource (source integration)
+
+With the `triblespace` feature on Unix, `widgets::triblespace::pile::PileCell`
+owns one read-only native reader and publishes `Arc<PileSnapshot>`. See
+[`examples/pile_resource.rs`](examples/pile_resource.rs): one cell opens and
+refreshes the source; an independent consumer copies its immutable snapshot.
+The resource displays only opening, byte replay, snapshot, ready or failed
+status. Collection selection, query tasks, result caches and query errors belong
+to consumers, not this cell. Share one cell for consumers of the same source;
+detaching a card does not reopen its pile.
+
+This integration currently requires the unpublished Core `refresh_next` API,
+reviewed at `3dd8930e5c97db1b319ea4d7f6e262eca559a8c2`. A registry dependency
+version alone does **not** establish that API is present. Use an exact-source
+Cargo override for the matching TribleSpace graph before building this example;
+this is not a claim that the registry release supports it.
+
+`PileCell::new` starts its background owner without reading the file on paint.
+`read()` is a nonblocking latest-value read; `refresh()` coalesces a request;
+`wait()` is only for explicitly blocking headless/capture preparation. The owner
+notices file growth while idle. A final native `snapshot()` bulk-refreshes, so
+100% of a sampled byte total is not snapshot readiness, index coverage or query
+completion. Missing files and native replay errors remain errors, never an
+empty successful dataset or an automatic repair.
+
+An output's `Published.observation` identifies its successful read. During a
+refresh or same-file failure, that output may remain the labelled last success;
+`Read.observation` and its status describe the newer resource attempt. These
+tokens are local to one cell, not portable versions. Include source identity and
+the consumer's exact inputs in asynchronous result checks. The public host is
+paired with the snapshot but is not itself a grant of READ authority. Changing
+path or host requires replacing the resource (for example with a distinct state
+key); never quietly relabel an old snapshot.
+
+Atomic file replacement is supported. In-place edits or truncation violate the
+native mapped-file contract and are not repaired by reopening. Drop signals
+shutdown without waiting on a native file lock; published snapshots keep their
+own backing alive.
+
 ## Script Workflow (Quick/Share)
 If you want a single-file notebook or quick distribution, use
 [`watchexec`](https://github.com/watchexec/watchexec) and
