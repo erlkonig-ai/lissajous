@@ -15,8 +15,14 @@ fn main(nb: &mut NotebookCtx) {
 
     for width in [180.0, 320.0, 640.0] {
         nb.view(move |ctx| {
-            ctx.set_width(width);
-            let cases = [
+            let start = ctx.next_widget_position();
+            ctx.ui_mut().scope_builder(
+                egui::UiBuilder::new()
+                    .max_rect(egui::Rect::from_min_size(start, egui::vec2(width, 0.0)))
+                    .layout(egui::Layout::top_down(egui::Align::Min)),
+                |ui| {
+                    ui.set_width(width);
+                    let cases = [
                 (Phase::Opening, None, None, None, false),
                 (
                     Phase::Replay,
@@ -79,31 +85,34 @@ fn main(nb: &mut NotebookCtx) {
                     false,
                 ),
             ];
-            for (phase, replayed, observed, error, refreshable) in cases {
-                ctx.add(
-                    PileProgress::new(
-                        Path::new("/public/observations/delta-team/project.pile"),
+                    for (phase, replayed, observed, error, refreshable) in cases {
+                        let response = ui.add(
+                            PileProgress::new(
+                                Path::new("/public/observations/delta-team/project.pile"),
+                                Progress {
+                                    phase,
+                                    replayed,
+                                    observed,
+                                    ..Default::default()
+                                },
+                            )
+                            .error(error)
+                            .refreshable(refreshable),
+                        );
+                        assert!((response.rect.width() - width).abs() < 1.0);
+                        ui.add_space(8.0);
+                    }
+                    ui.add(PileProgress::new(
+                        Path::new("/public/observations/coast-team/project.pile"),
                         Progress {
-                            phase,
-                            replayed,
-                            observed,
+                            phase: Phase::Ready,
+                            replayed: Some(1_234_567),
+                            observed: Some(1_234_567),
                             ..Default::default()
                         },
-                    )
-                    .error(error)
-                    .refreshable(refreshable),
-                );
-                ctx.add_space(8.0);
-            }
-            ctx.add(PileProgress::new(
-                Path::new("/public/observations/coast-team/project.pile"),
-                Progress {
-                    phase: Phase::Ready,
-                    replayed: Some(1_234_567),
-                    observed: Some(1_234_567),
-                    ..Default::default()
+                    ));
                 },
-            ));
+            );
         });
     }
     nb.settled();

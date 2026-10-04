@@ -166,7 +166,7 @@ impl egui::Widget for PileProgress<'_> {
 
         let retry = self.progress.phase == Phase::Failed;
         let refresh = self.refreshable.then(|| {
-            ui.put(
+            ui.place(
                 egui::Rect::from_min_size(pos2(rect.right() - 18.0, rect.top()), vec2(18.0, 17.0)),
                 egui::Button::new("↻").frame(false).small(),
             )
@@ -251,10 +251,16 @@ impl egui::Widget for PileProgress<'_> {
             None => response,
         };
         if let Some(error) = self.error {
-            ui.add(
-                egui::Label::new(egui::RichText::new(error).color(ui.visuals().error_fg_color))
-                    .wrap(),
+            let error = ui.add(
+                egui::Label::new(
+                    egui::RichText::new(error)
+                        .monospace()
+                        .size(11.0)
+                        .color(ui.visuals().error_fg_color),
+                )
+                .wrap(),
             );
+            return response.union(error);
         }
         response
     }
@@ -562,6 +568,69 @@ mod tests {
         assert!(text.contains(&error));
         assert!(!text.contains(&"↻"));
         assert!(text.iter().any(|text| text.ends_with("failed")));
+    }
+
+    #[test]
+    fn refresh_preserves_following_layout_and_errors_stay_below_the_rail() {
+        for refreshable in [false, true] {
+            for width in [180.0, 320.0] {
+                let context = egui::Context::default();
+                let error = "Invalid record; the last snapshot remains available.";
+                let mut face_bottom = 0.0;
+                let mut face_rect = egui::Rect::NOTHING;
+                let output = context.run_ui(
+                    egui::RawInput {
+                        screen_rect: Some(egui::Rect::from_min_size(
+                            egui::Pos2::ZERO,
+                            egui::vec2(width, 400.0),
+                        )),
+                        ..Default::default()
+                    },
+                    |ui| {
+                        let first = ui.add(
+                            PileProgress::new(
+                                Path::new("/public/source.pile"),
+                                Progress::default(),
+                            )
+                            .refreshable(refreshable),
+                        );
+                        assert!(ui.next_widget_position().y >= first.rect.bottom());
+                        let start = ui.next_widget_position();
+                        face_bottom = start.y + 48.0;
+                        let failed = ui.add(
+                            PileProgress::new(
+                                Path::new("/public/source.pile"),
+                                Progress {
+                                    phase: Phase::Failed,
+                                    ..Default::default()
+                                },
+                            )
+                            .error(Some(error))
+                            .refreshable(refreshable),
+                        );
+                        face_rect = failed.rect;
+                        assert!(failed.rect.bottom() > face_bottom);
+                        assert!(ui.next_widget_position().y >= failed.rect.bottom());
+                        assert!(ui.min_rect().contains_rect(failed.rect));
+                        assert!(ui.min_rect().width() <= width);
+                    },
+                );
+                let error_shape = output
+                    .shapes
+                    .iter()
+                    .find_map(|shape| match &shape.shape {
+                        egui::Shape::Text(text) if text.galley.job.text == error => Some(text),
+                        _ => None,
+                    })
+                    .expect("visible error text");
+                let bounds = egui::Rect::from_min_size(error_shape.pos, error_shape.galley.size());
+                assert!(
+                    bounds.top() >= face_bottom,
+                    "error overlaps rail: {bounds:?}"
+                );
+                assert!(face_rect.expand(1.0).contains_rect(bounds));
+            }
+        }
     }
 
     #[test]
