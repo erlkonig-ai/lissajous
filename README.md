@@ -208,7 +208,7 @@ and [`ComputedState`](https://docs.rs/lissajous/0.19.1/lissajous/dataflow/struct
 
 ### Native pile resource (source integration)
 
-With the `triblespace` feature on Unix, `widgets::triblespace::pile::PileCell`
+With the `triblespace-pile` feature on Unix, `widgets::triblespace::pile::PileCell`
 owns one read-only native reader and publishes `Arc<PileSnapshot>`. See
 [`examples/pile_resource.rs`](examples/pile_resource.rs): one cell opens and
 refreshes the source; an independent consumer copies its immutable snapshot.
@@ -216,6 +216,11 @@ The resource displays only opening, byte replay, snapshot, ready or failed
 status. Collection selection, query tasks, result caches and query errors belong
 to consumers, not this cell. Share one cell for consumers of the same source;
 detaching a card does not reopen its pile.
+
+Use `--no-default-features --features triblespace-pile` for this example's lean
+graph: native storage and parallel queries, without the facade's GPU, WASM or
+object-store defaults. The existing `triblespace` feature also includes the pile
+cell and retains WASM value formatting for the entity inspector.
 
 This integration currently requires the unpublished Core `refresh_next` API,
 reviewed at `3dd8930e5c97db1b319ea4d7f6e262eca559a8c2`. A registry dependency
@@ -428,7 +433,9 @@ Lissajous defaults to a lean build with `markdown` enabled. Add extras as needed
 - `markdown`: rich Markdown rendering with `md!` and `note!` (default).
 - `typst`: Typst integration — math, scientific typesetting, and full document rendering via `typst!` macro. Renders as vector geometry directly on egui's Painter (no SVG, no raster). Includes the RAL color palette, grid-aligned layout constants, text selection, and inline error diagnostics.
 - `polars`: dataframe widget (Polars + Lissajous table).
-- `triblespace`: immutable TribleSpace data inspection with the entity graph widget.
+- `triblespace-pile`: retained native pile resource and immutable snapshot output
+  on Unix (currently requires the exact Core source described above).
+- `triblespace`: also enables the entity graph inspector and its WASM value formatters.
 - `cubecl`: GPU simulated-annealing ordering for the entity inspector (use with `triblespace`).
 - `telemetry`: span-based profiling via `tracing` that writes into a dedicated TribleSpace pile.
 - `rapier`: read-only wireframe snapshot adapter for `rapier3d-f64` 0.35.1.

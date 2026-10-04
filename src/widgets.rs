@@ -46,7 +46,7 @@ pub mod table;
 mod table_layout;
 mod table_sizing;
 /// TribleSpace widgets for immutable graph data.
-#[cfg(feature = "triblespace")]
+#[cfg(any(feature = "triblespace", feature = "triblespace-pile"))]
 pub mod triblespace;
 /// Typst vector rendering engine (outline, painter, world).
 #[cfg(feature = "typst")]

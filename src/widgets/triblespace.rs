@@ -1,14 +1,14 @@
 //! Widgets for inspecting immutable TribleSpace data.
 
+#[cfg(feature = "triblespace")]
 pub mod entity_inspector;
 
 /// A retained, read-only native pile resource that publishes immutable snapshots.
-#[cfg(unix)]
+#[cfg(all(feature = "triblespace-pile", unix))]
 pub mod pile;
 
-pub use entity_inspector::id_full;
-pub use entity_inspector::id_short;
-pub use entity_inspector::EntityInspectorResponse;
-pub use entity_inspector::EntityInspectorStats;
-pub use entity_inspector::EntityInspectorWidget;
-pub use entity_inspector::EntityOrder;
+#[cfg(feature = "triblespace")]
+pub use entity_inspector::{
+    id_full, id_short, EntityInspectorResponse, EntityInspectorStats, EntityInspectorWidget,
+    EntityOrder,
+};

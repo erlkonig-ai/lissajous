@@ -5,6 +5,8 @@
 //! clone [`Published::snapshot`] and own their own queries, tasks and answers.
 //! This resource never selects a collection, runs a query, fetches a missing
 //! body or builds an index. Detaching its card changes placement only.
+//! Enable `triblespace-pile` for this resource without the inspector's WASM
+//! formatter dependency; the existing `triblespace` feature includes both.
 //!
 //! This source requires Core's `refresh_next` API (revision `3dd8930e`),
 //! not merely a registry version bearing the same number. Piles must remain

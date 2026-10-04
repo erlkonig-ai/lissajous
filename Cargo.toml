@@ -64,6 +64,8 @@ optional = true
 [dependencies.triblespace]
 version = "0.47.0"
 optional = true
+default-features = false
+features = ["parallel"]
 
 [dependencies.triblespace-net]
 version = "0.47.0"
@@ -113,7 +115,8 @@ accesskit = []
 markdown = ["dep:egui_commonmark"]
 polars = ["dep:polars"]
 plots = ["dep:egui_plot"]
-triblespace = ["dep:triblespace"]
+triblespace-pile = ["dep:triblespace"]
+triblespace = ["triblespace-pile", "triblespace/wasm"]
 cubecl = ["dep:cubecl"]
 typst = ["dep:typst", "dep:typst-syntax", "dep:ttf-parser", "dep:earcutr", "dep:comemo"]
 telemetry = ["triblespace", "triblespace/telemetry"]
@@ -171,7 +174,7 @@ required-features = ["triblespace"]
 
 [[example]]
 name = "pile_resource"
-required-features = ["triblespace"]
+required-features = ["triblespace-pile"]
 
 [[example]]
 name = "minla"

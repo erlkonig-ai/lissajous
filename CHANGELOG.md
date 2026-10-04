@@ -4,11 +4,14 @@ All notable changes to this project will be documented in this file.
 
 ## Unreleased
 
-- Unix native pile resource cell behind `triblespace`: retained read-only open
+- Unix native pile resource cell behind `triblespace-pile`: retained read-only open
   and refresh, coalesced byte progress, and actual immutable snapshot output.
   Consumer queries remain independent. This source integration requires the
   unpublished Core `refresh_next` API; no registry compatibility or release is
   implied by the existing dependency version.
+- The pile-only feature opts into native parallel queries without TribleSpace's
+  GPU, WASM or object-store defaults; `triblespace` retains the existing
+  inspector and its required WASM formatters, and includes the pile cell.
 
 ## 0.19.1 - 2026-10-03
 
