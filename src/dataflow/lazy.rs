@@ -12,6 +12,21 @@ use crate::state::{ArcReadGuard, StateAccess, StateId};
 /// Handles return a guard; lazy recipes return an owned [`Arc`]. Neither needs
 /// to clone the underlying state. Reading is synchronous and explicit: this is
 /// a pull interface, not a subscription or an automatic dependency scheduler.
+///
+/// ```
+/// use lissajous::prelude::*;
+///
+/// fn expensive_calculation(left: &u32, right: &u32) -> u32 {
+///     left + right
+/// }
+///
+/// fn totals(nb: &mut NotebookCtx, left: StateId<u32>, right: StateId<u32>) {
+///     let total = (left, right).map(expensive_calculation).memo("total");
+///     nb.view(total.tap());
+///     let label = total.map(|total| format!("Downstream: {total}"));
+///     nb.view(move |ctx| { ctx.label(label.read(ctx).as_str()); });
+/// }
+/// ```
 pub trait ReadValue {
     type Value;
     type Read: Deref<Target = Self::Value>;
