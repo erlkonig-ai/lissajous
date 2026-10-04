@@ -200,12 +200,7 @@ impl PileCell {
         }
         let delay = if let Some(read) = self.read() {
             let error = read.error.as_ref().map(ToString::to_string);
-            if ui
-                .add(PileProgress::new(&self.path, read.progress).error(error.as_deref()))
-                .clicked()
-            {
-                self.refresh();
-            }
+            ui.add(PileProgress::new(&self.path, read.progress).error(error.as_deref()));
             if read.progress.active() {
                 Duration::from_millis(100)
             } else {

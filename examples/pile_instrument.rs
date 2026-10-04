@@ -1,8 +1,6 @@
 //! Synthetic presentation fixture; never constructs a PileCell or opens a file.
-//! Capture via the actual Lissajous renderer:
-//! `pile_instrument --headless --theme light --out-dir /tmp/pile-face-light`
-//! and repeat with `--theme dark`. Each card contains the same phases at a
-//! different width, including the narrow footprint of a detached instrument.
+//! Capture using `pile_instrument --headless --theme light --out-dir ...`
+//! and repeat with `--theme dark`. The actual faces are 180, 320 and 640 points.
 
 #[cfg(unix)]
 use lissajous::prelude::*;
@@ -22,70 +20,34 @@ fn main(nb: &mut NotebookCtx) {
                     .layout(egui::Layout::top_down(egui::Align::Min)),
                 |ui| {
                     ui.set_width(width);
+                    let total = Some(233_305_898_752);
+                    let part = Some(84_325_103_000);
+                    let error =
+                        "Invalid record at byte 84325103000; the last snapshot remains available.";
                     let cases = [
-                (Phase::Opening, None, None, None, false),
-                (
-                    Phase::Replay,
-                    Some(100_000_000_000),
-                    Some(200_000_000_000),
-                    None,
-                    true,
-                ),
-                (
-                    Phase::Replay,
-                    Some(84_325_103_000),
-                    Some(233_305_898_752),
-                    None,
-                    true,
-                ),
-                (
-                    Phase::Replay,
-                    Some(233_305_898_752),
-                    Some(233_305_898_752),
-                    None,
-                    true,
-                ),
-                (
-                    Phase::Snapshot,
-                    Some(233_305_898_752),
-                    Some(233_305_898_752),
-                    None,
-                    true,
-                ),
-                (
-                    Phase::Ready,
-                    Some(233_305_898_752),
-                    Some(233_305_898_752),
-                    None,
-                    true,
-                ),
-                (
-                    Phase::Ready,
-                    Some(233_305_898_752),
-                    Some(241_305_898_752),
-                    None,
-                    true,
-                ),
-                (Phase::Replay, Some(233_305_898_752), None, None, true),
-                (Phase::Ready, Some(0), Some(0), None, true),
-                (
-                    Phase::Failed,
-                    Some(84_325_103_000),
-                    Some(233_305_898_752),
-                    Some(
-                        "Invalid record at byte 84325103000; the last snapshot remains available.",
-                    ),
-                    true,
-                ),
-                (
-                    Phase::Failed,
-                    None,
-                    None,
-                    Some("Permission denied while opening this source."),
-                    false,
-                ),
-            ];
-                    for (phase, replayed, observed, error, refreshable) in cases {
+                        (Phase::Opening, None, None, None),
+                        (
+                            Phase::Replay,
+                            Some(100_000_000_000),
+                            Some(200_000_000_000),
+                            None,
+                        ),
+                        (Phase::Replay, part, total, None),
+                        (Phase::Replay, total, total, None),
+                        (Phase::Snapshot, total, total, None),
+                        (Phase::Ready, total, total, None),
+                        (Phase::Ready, total, Some(241_305_898_752), None),
+                        (Phase::Replay, total, None, None),
+                        (Phase::Ready, Some(0), Some(0), None),
+                        (Phase::Failed, part, total, Some(error)),
+                        (
+                            Phase::Failed,
+                            None,
+                            None,
+                            Some("Permission denied while opening this source."),
+                        ),
+                    ];
+                    for (phase, replayed, observed, error) in cases {
                         let response = ui.add(
                             PileProgress::new(
                                 Path::new("/public/observations/delta-team/project.pile"),
@@ -96,18 +58,20 @@ fn main(nb: &mut NotebookCtx) {
                                     ..Default::default()
                                 },
                             )
-                            .error(error)
-                            .refreshable(refreshable),
+                            .error(error),
                         );
                         assert!((response.rect.width() - width).abs() < 1.0);
+                        if error.is_none() {
+                            assert_eq!(response.rect.height(), 28.0);
+                        }
                         ui.add_space(8.0);
                     }
                     ui.add(PileProgress::new(
                         Path::new("/public/observations/coast-team/project.pile"),
                         Progress {
                             phase: Phase::Ready,
-                            replayed: Some(1_234_567),
-                            observed: Some(1_234_567),
+                            replayed: total,
+                            observed: total,
                             ..Default::default()
                         },
                     ));

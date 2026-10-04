@@ -285,17 +285,19 @@ With the `triblespace-pile` feature on Unix, `widgets::triblespace::pile::PileCe
 owns one read-only native reader and publishes `Arc<PileSnapshot>`. See
 [`examples/pile_resource.rs`](examples/pile_resource.rs): one cell opens and
 refreshes the source; an independent consumer copies its immutable snapshot.
-The resource displays only opening, byte replay, snapshot, ready or failed
-status. Collection selection, query tasks, result caches and query errors belong
+The resource automatically follows appends and publishes completed snapshots.
+Collection selection, query tasks, result caches and query errors belong
 to consumers, not this cell. Share one cell for consumers of the same source;
 detaching a card does not reopen its pile.
 
-The compact face shows the configured path, a replay-watermark tick and measured
-bytes inside one rail; hatched space is unread or unknown, not simulated progress.
+The compact face shows the configured path on the left and measured bytes on
+the right, inside one 28-point rail. The replay-watermark tick and hatched unread
+or unknown space are measured, not simulated progress. Ready needs no label;
+opening, replay, snapshot and failed remain visible inside the rail.
 Byte labels use decimal units (GB), with exact byte counts and the full path on
-hover. `PileProgress::new(path, progress).error(error).refreshable(false)` renders
-the same data-only face during a caller's preflight, without opening a resource
-or advertising a refresh action that caller cannot perform.
+hover. `PileProgress::new(path, progress).error(error)` renders the same data-only
+face during a caller's preflight, without opening a resource. The instrument is
+noninteractive; programmatic `PileCell::refresh` still permits explicit retries.
 
 Use `--no-default-features --features triblespace-pile` for this example's lean
 graph: native storage and parallel queries, without the facade's GPU, WASM or

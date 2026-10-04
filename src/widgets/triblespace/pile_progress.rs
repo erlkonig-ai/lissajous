@@ -93,14 +93,13 @@ pub fn replay_batch<E>(
 
 /// Data-only face of a pile resource. No file is opened or read here.
 ///
-/// The tick measures replayed bytes, not snapshot readiness. The returned
-/// response is clicked only by the small refresh/retry affordance; its caller
-/// decides whether to request a refresh. Errors stay visible below the rail.
+/// The tick measures replayed bytes, not snapshot readiness. This is a
+/// hover-only instrument; the resource publishes automatically. Errors stay
+/// visible below the rail, and exact path/byte information stays on hover.
 pub struct PileProgress<'a> {
     path: &'a Path,
     progress: Progress,
     error: Option<&'a str>,
-    refreshable: bool,
 }
 impl<'a> PileProgress<'a> {
     pub fn new(path: &'a Path, progress: Progress) -> Self {
@@ -108,7 +107,6 @@ impl<'a> PileProgress<'a> {
             path,
             progress,
             error: None,
-            refreshable: true,
         }
     }
 
@@ -116,75 +114,70 @@ impl<'a> PileProgress<'a> {
         self.error = error;
         self
     }
-
-    /// Omit the action when the caller has no refresh/retry operation yet.
-    pub fn refreshable(mut self, refreshable: bool) -> Self {
-        self.refreshable = refreshable;
-        self
-    }
 }
 
 impl egui::Widget for PileProgress<'_> {
     fn ui(self, ui: &mut egui::Ui) -> egui::Response {
-        use egui::{pos2, vec2, Align2, FontId, Sense, Stroke, StrokeKind};
-        let (rect, response) =
-            ui.allocate_exact_size(vec2(ui.available_width().max(1.0), 48.0), Sense::hover());
-        let painter = ui.painter_at(rect.intersect(ui.clip_rect()));
+        use egui::{pos2, vec2, FontId, Sense, Stroke, StrokeKind};
+        let (rail, response) =
+            ui.allocate_exact_size(vec2(ui.available_width().max(1.0), 28.0), Sense::hover());
+        let painter = ui.painter_at(rail.intersect(ui.clip_rect()));
         let text = ui.visuals().text_color();
         let weak = ui.visuals().weak_text_color();
-        let path_area = egui::Rect::from_min_max(
-            rect.min,
-            pos2(
-                rect.right() - if self.refreshable { 22.0 } else { 0.0 },
-                rect.top() + 17.0,
-            ),
-        );
-        let path_font = FontId::monospace(10.0);
-        let path = self.path.to_string_lossy();
-        let label = middle_elide(&path, path_area.width(), |label| {
-            painter
-                .layout_no_wrap(label.to_owned(), path_font.clone(), weak)
-                .size()
-                .x
-        });
-        painter.text(
-            path_area.left_center(),
-            Align2::LEFT_CENTER,
-            label,
-            path_font,
-            weak,
-        );
-        // Debug retains escaped non-UTF8 path bytes instead of silently replacing
-        // them. Ordinary UTF-8 paths are shown verbatim, including all parents.
-        let full_path = self
-            .path
-            .to_str()
-            .map(str::to_owned)
-            .unwrap_or_else(|| format!("{:?}", self.path));
-        ui.interact(path_area, response.id.with("path"), Sense::hover())
-            .on_hover_text(full_path);
-
-        let retry = self.progress.phase == Phase::Failed;
-        let refresh = self.refreshable.then(|| {
-            ui.place(
-                egui::Rect::from_min_size(pos2(rect.right() - 18.0, rect.top()), vec2(18.0, 17.0)),
-                egui::Button::new("↻").frame(false).small(),
-            )
-            .on_hover_text(if retry {
-                "Retry this source"
-            } else {
-                "Refresh this source"
-            })
-        });
-
-        let rail = egui::Rect::from_min_max(pos2(rect.left(), rect.top() + 20.0), rect.max);
-        let stroke = if retry {
+        let failed = self.progress.phase == Phase::Failed;
+        let stroke = if failed {
             ui.visuals().error_fg_color
         } else {
             weak
         };
         painter.rect_stroke(rail, 2.0, Stroke::new(1.0, stroke), StrokeKind::Inside);
         let inner = rail.shrink(2.0);
+        let right = inner.right() - 4.0;
+        let active = self.progress.phase != Phase::Ready;
+        let amount =
+            painter.layout_no_wrap(rail_label(self.progress), FontId::monospace(10.0), text);
+        let amount_rect = egui::Rect::from_min_size(
+            pos2(
+                right - amount.size().x,
+                rail.center().y - amount.size().y * 0.5 - if active { 5.0 } else { 0.0 },
+            ),
+            amount.size(),
+        );
+        let phase = active.then(|| {
+            let galley = painter.layout_no_wrap(
+                phase_label(self.progress.phase).to_owned(),
+                FontId::monospace(8.0),
+                if failed { stroke } else { weak },
+            );
+            let rect = egui::Rect::from_min_size(
+                pos2(
+                    right - galley.size().x,
+                    rail.center().y + 6.0 - galley.size().y * 0.5,
+                ),
+                galley.size(),
+            );
+            (rect, galley)
+        });
+        let path_font = FontId::monospace(10.0);
+        let path_left = inner.left() + 4.0;
+        let path_right = phase.as_ref().map_or(amount_rect.left(), |(rect, _)| {
+            rect.left().min(amount_rect.left())
+        }) - 8.0;
+        let label = middle_elide(
+            &self.path.to_string_lossy(),
+            (path_right - path_left).max(0.0),
+            |label| {
+                painter
+                    .layout_no_wrap(label.to_owned(), path_font.clone(), weak)
+                    .size()
+                    .x
+            },
+        );
+        let path = painter.layout_no_wrap(label, path_font, weak);
+        let path_rect = egui::Rect::from_min_size(
+            pos2(path_left, rail.center().y - path.size().y * 0.5),
+            path.size(),
+        );
         let fraction = self.progress.replay_fraction();
         let watermark = fraction.map(|fraction| inner.left() + inner.width() * fraction);
         let unread = egui::Rect::from_min_max(
@@ -205,51 +198,35 @@ impl egui::Widget for PileProgress<'_> {
                 x += 8.0;
             }
         }
-        let amount = rail_label(self.progress);
-        let mut font = FontId::monospace(11.0);
-        while font.size > 8.0
-            && painter
-                .layout_no_wrap(amount.clone(), font.clone(), text)
-                .size()
-                .x
-                > inner.width() - 8.0
-        {
-            font.size -= 0.5;
-        }
-        let galley = painter.layout_no_wrap(amount, font, text);
-        let label_rect = egui::Rect::from_center_size(inner.center(), galley.size()).expand(2.0);
         if let Some(x) = watermark {
-            let tick = Stroke::new(2.0, if retry { stroke } else { text });
-            if x >= label_rect.left() && x <= label_rect.right() {
-                // The watermark stays at its measured byte position without
-                // striking through the amount when it crosses the label.
-                for (top, bottom) in [
-                    (inner.top(), label_rect.top()),
-                    (label_rect.bottom(), inner.bottom()),
-                ] {
-                    if top < bottom {
-                        painter.line_segment([pos2(x, top), pos2(x, bottom)], tick);
-                    }
-                }
-            } else {
-                painter.line_segment([pos2(x, inner.top()), pos2(x, inner.bottom())], tick);
+            let tick = Stroke::new(2.0, if failed { stroke } else { text });
+            let mut labels = vec![path_rect, amount_rect];
+            labels.extend(phase.as_ref().map(|(rect, _)| *rect));
+            for (top, bottom) in tick_spans(inner, x, &labels) {
+                painter.line_segment([pos2(x, top), pos2(x, bottom)], tick);
             }
         }
-        painter
-            .with_clip_rect(inner.intersect(painter.clip_rect()))
-            .galley(inner.center() - galley.size() * 0.5, galley, text);
+        let content = painter.with_clip_rect(inner.intersect(painter.clip_rect()));
+        content.galley(path_rect.min, path, weak);
+        content.galley(amount_rect.min, amount, text);
+        if let Some((rect, galley)) = phase {
+            content.galley(rect.min, galley, if failed { stroke } else { weak });
+        }
+        // Preserve the exact configured path, without filesystem resolution.
+        // Debug escapes non-UTF8 path bytes instead of silently replacing them.
+        let full_path = self
+            .path
+            .to_str()
+            .map(str::to_owned)
+            .unwrap_or_else(|| format!("{:?}", self.path));
         let detail = format!(
-            "{}\nReplayed: {}\nObserved: {}",
+            "{full_path}\n{}\nReplayed: {}\nObserved: {}",
             phase_label(self.progress.phase),
             exact_bytes(self.progress.replayed),
             exact_bytes(self.progress.observed)
         );
         ui.interact(rail, response.id.with("bytes"), Sense::hover())
             .on_hover_text(detail);
-        let response = match refresh {
-            Some(refresh) => response.union(refresh),
-            None => response,
-        };
         if let Some(error) = self.error {
             let error = ui.add(
                 egui::Label::new(
@@ -266,12 +243,59 @@ impl egui::Widget for PileProgress<'_> {
     }
 }
 
+fn tick_spans(inner: egui::Rect, x: f32, labels: &[egui::Rect]) -> Vec<(f32, f32)> {
+    let mut blocked: Vec<_> = labels
+        .iter()
+        .map(|rect| rect.expand(1.0))
+        .filter(|rect| x >= rect.left() && x <= rect.right())
+        .collect();
+    blocked.sort_by(|a, b| a.top().total_cmp(&b.top()));
+    let mut spans = Vec::new();
+    let mut top = inner.top();
+    for rect in blocked {
+        let bottom = rect.top().min(inner.bottom());
+        if top < bottom {
+            spans.push((top, bottom));
+        }
+        top = top.max(rect.bottom());
+    }
+    if top < inner.bottom() {
+        spans.push((top, inner.bottom()));
+    }
+    spans
+}
+
 fn middle_elide(text: &str, width: f32, measure: impl Fn(&str) -> f32) -> String {
     if measure(text) <= width {
         return text.to_owned();
     }
     if measure("…") > width {
         return String::new();
+    }
+    if let Some((parents, basename)) = text.rsplit_once('/') {
+        if let Some(parent) = parents
+            .rsplit('/')
+            .next()
+            .filter(|parent| !parent.is_empty())
+        {
+            // Keep the parent's beginning when the whole parent no longer
+            // fits, so same-basename sources can still be distinguished.
+            if measure(&format!("{parent}/{basename}")) > width {
+                let mut prefix = String::new();
+                let mut shortened = None;
+                for ch in parent.chars() {
+                    prefix.push(ch);
+                    let candidate = format!("{prefix}…/{basename}");
+                    if measure(&candidate) > width {
+                        break;
+                    }
+                    shortened = Some(candidate);
+                }
+                if let Some(shortened) = shortened {
+                    return shortened;
+                }
+            }
+        }
     }
     let chars: Vec<_> = text.chars().collect();
     // Prefer keeping the immediate parent with the basename: two different
@@ -345,10 +369,9 @@ fn rail_label(progress: Progress) -> String {
         None => "?".into(),
     };
     format!(
-        "{}/{} {suffix} · {}",
+        "{}/{} {suffix}",
         value(progress.replayed),
-        value(progress.observed),
-        phase_label(progress.phase)
+        value(progress.observed)
     )
 }
 
@@ -457,9 +480,9 @@ mod tests {
                             ..Default::default()
                         },
                     ));
-                    assert_eq!(response.rect.height(), 48.0);
+                    assert_eq!(response.rect.height(), 28.0);
                     assert!(ui.min_rect().width() <= width);
-                    assert!(ui.min_rect().height() <= 52.0);
+                    assert!(ui.min_rect().height() <= 32.0);
                 },
             );
             assert!(!output.shapes.is_empty());
@@ -479,29 +502,29 @@ mod tests {
 
     #[test]
     fn labels_preserve_unknowns_and_do_not_promote_byte_completion() {
-        assert_eq!(rail_label(Progress::default()), "?/? B · opening");
+        assert_eq!(rail_label(Progress::default()), "?/? B");
         let mut progress = Progress {
             replayed: Some(1_000),
             observed: Some(1_000),
             phase: Phase::Replay,
             ..Default::default()
         };
-        assert_eq!(rail_label(progress), "1.0/1.0 kB · replay");
+        assert_eq!(rail_label(progress), "1.0/1.0 kB");
         progress.phase = Phase::Snapshot;
-        assert!(rail_label(progress).ends_with("snapshot"));
+        assert_eq!(rail_label(progress), "1.0/1.0 kB");
         progress.phase = Phase::Ready;
-        assert!(rail_label(progress).ends_with("ready"));
+        assert_eq!(rail_label(progress), "1.0/1.0 kB");
         progress.observed = Some(2_000);
         assert_eq!(progress.pending_bytes(), Some(1_000));
         assert_eq!(progress.replay_fraction(), Some(0.5));
-        assert_eq!(rail_label(progress), "1.0/2.0 kB · ready");
+        assert_eq!(rail_label(progress), "1.0/2.0 kB");
         progress.observed = None;
         assert_eq!(progress.replay_fraction(), None);
-        assert_eq!(rail_label(progress), "1.0/? kB · ready");
+        assert_eq!(rail_label(progress), "1.0/? kB");
         progress.observed = Some(0);
         assert_eq!(progress.replay_fraction(), None);
         progress.replayed = Some(0);
-        assert_eq!(rail_label(progress), "0/0 B · ready");
+        assert_eq!(rail_label(progress), "0/0 B");
         assert_eq!(progress.replay_fraction(), Some(1.0));
     }
 
@@ -516,6 +539,14 @@ mod tests {
         assert!(short.ends_with("source/project.pile"));
         assert!(measure(&short) <= 29.0);
         assert_eq!(middle_elide(path, 0.0, measure), "");
+        assert_eq!(
+            middle_elide("/public/delta-team/project.pile", 19.0, measure),
+            "delta…/project.pile"
+        );
+        assert_eq!(
+            middle_elide("/public/coast-team/project.pile", 19.0, measure),
+            "coast…/project.pile"
+        );
         assert_ne!(
             middle_elide(
                 "/public/observations/delta-team/project.pile",
@@ -531,7 +562,7 @@ mod tests {
     }
 
     #[test]
-    fn errors_remain_visible_and_action_can_be_absent() {
+    fn errors_remain_visible_without_an_action() {
         let context = egui::Context::default();
         let error = "Permission denied while opening /public/source/project.pile";
         let output = context.run_ui(
@@ -551,8 +582,7 @@ mod tests {
                             ..Default::default()
                         },
                     )
-                    .error(Some(error))
-                    .refreshable(false),
+                    .error(Some(error)),
                 );
                 assert!(ui.min_rect().width() <= 180.0);
             },
@@ -571,74 +601,68 @@ mod tests {
     }
 
     #[test]
-    fn refresh_preserves_following_layout_and_errors_stay_below_the_rail() {
-        for refreshable in [false, true] {
-            for width in [180.0, 320.0] {
-                let context = egui::Context::default();
-                let error = "Invalid record; the last snapshot remains available.";
-                let mut face_bottom = 0.0;
-                let mut face_rect = egui::Rect::NOTHING;
-                let output = context.run_ui(
-                    egui::RawInput {
-                        screen_rect: Some(egui::Rect::from_min_size(
-                            egui::Pos2::ZERO,
-                            egui::vec2(width, 400.0),
-                        )),
-                        ..Default::default()
-                    },
-                    |ui| {
-                        let first = ui.add(
-                            PileProgress::new(
-                                Path::new("/public/source.pile"),
-                                Progress::default(),
-                            )
-                            .refreshable(refreshable),
-                        );
-                        assert!(ui.next_widget_position().y >= first.rect.bottom());
-                        let start = ui.next_widget_position();
-                        face_bottom = start.y + 48.0;
-                        let failed = ui.add(
-                            PileProgress::new(
-                                Path::new("/public/source.pile"),
-                                Progress {
-                                    phase: Phase::Failed,
-                                    ..Default::default()
-                                },
-                            )
-                            .error(Some(error))
-                            .refreshable(refreshable),
-                        );
-                        face_rect = failed.rect;
-                        assert!(failed.rect.bottom() > face_bottom);
-                        assert!(ui.next_widget_position().y >= failed.rect.bottom());
-                        assert!(ui.min_rect().contains_rect(failed.rect));
-                        assert!(ui.min_rect().width() <= width);
-                    },
-                );
-                let error_shape = output
-                    .shapes
-                    .iter()
-                    .find_map(|shape| match &shape.shape {
-                        egui::Shape::Text(text) if text.galley.job.text == error => Some(text),
-                        _ => None,
-                    })
-                    .expect("visible error text");
-                let bounds = egui::Rect::from_min_size(error_shape.pos, error_shape.galley.size());
-                assert!(
-                    bounds.top() >= face_bottom,
-                    "error overlaps rail: {bounds:?}"
-                );
-                assert!(face_rect.expand(1.0).contains_rect(bounds));
-            }
+    fn following_layout_and_errors_stay_below_the_rail() {
+        for width in [180.0, 320.0] {
+            let context = egui::Context::default();
+            let error = "Invalid record; the last snapshot remains available.";
+            let mut face_bottom = 0.0;
+            let mut face_rect = egui::Rect::NOTHING;
+            let output = context.run_ui(
+                egui::RawInput {
+                    screen_rect: Some(egui::Rect::from_min_size(
+                        egui::Pos2::ZERO,
+                        egui::vec2(width, 400.0),
+                    )),
+                    ..Default::default()
+                },
+                |ui| {
+                    let first = ui.add(PileProgress::new(
+                        Path::new("/public/source.pile"),
+                        Progress::default(),
+                    ));
+                    assert!(ui.next_widget_position().y >= first.rect.bottom());
+                    let start = ui.next_widget_position();
+                    face_bottom = start.y + 28.0;
+                    let failed = ui.add(
+                        PileProgress::new(
+                            Path::new("/public/source.pile"),
+                            Progress {
+                                phase: Phase::Failed,
+                                ..Default::default()
+                            },
+                        )
+                        .error(Some(error)),
+                    );
+                    face_rect = failed.rect;
+                    assert!(failed.rect.bottom() > face_bottom);
+                    assert!(ui.next_widget_position().y >= failed.rect.bottom());
+                    assert!(ui.min_rect().contains_rect(failed.rect));
+                    assert!(ui.min_rect().width() <= width);
+                },
+            );
+            let error_shape = output
+                .shapes
+                .iter()
+                .find_map(|shape| match &shape.shape {
+                    egui::Shape::Text(text) if text.galley.job.text == error => Some(text),
+                    _ => None,
+                })
+                .expect("visible error text");
+            let bounds = egui::Rect::from_min_size(error_shape.pos, error_shape.galley.size());
+            assert!(
+                bounds.top() >= face_bottom,
+                "error overlaps rail: {bounds:?}"
+            );
+            assert!(face_rect.expand(1.0).contains_rect(bounds));
         }
     }
 
     #[test]
-    fn only_the_refresh_affordance_requests_an_action() {
-        for (point, refreshable, expected) in [
-            (egui::pos2(271.0, 8.5), true, true),
-            (egui::pos2(140.0, 34.0), true, false),
-            (egui::pos2(271.0, 8.5), false, false),
+    fn the_entire_rail_is_noninteractive() {
+        for point in [
+            egui::pos2(16.0, 14.0),
+            egui::pos2(140.0, 14.0),
+            egui::pos2(271.0, 14.0),
         ] {
             let context = egui::Context::default();
             let mut clicked = false;
@@ -663,18 +687,101 @@ mod tests {
                     },
                     |ui| {
                         clicked |= ui
-                            .add(
-                                PileProgress::new(
-                                    Path::new("/public/project.pile"),
-                                    Progress::default(),
-                                )
-                                .refreshable(refreshable),
-                            )
+                            .add(PileProgress::new(
+                                Path::new("/public/project.pile"),
+                                Progress::default(),
+                            ))
                             .clicked();
                     },
                 );
             }
-            assert_eq!(clicked, expected);
+            assert!(!clicked);
+        }
+    }
+
+    #[test]
+    fn path_and_bytes_are_inside_one_rail_without_ready_or_refresh_decoration() {
+        for phase in [
+            Phase::Opening,
+            Phase::Replay,
+            Phase::Snapshot,
+            Phase::Ready,
+            Phase::Failed,
+        ] {
+            for width in [180.0, 320.0, 640.0] {
+                let context = egui::Context::default();
+                let mut rail = egui::Rect::NOTHING;
+                let output = context.run_ui(
+                    egui::RawInput {
+                        screen_rect: Some(egui::Rect::from_min_size(
+                            egui::Pos2::ZERO,
+                            egui::vec2(width, 200.0),
+                        )),
+                        ..Default::default()
+                    },
+                    |ui| {
+                        rail = ui
+                            .add(PileProgress::new(
+                                Path::new("/public/delta-team/project.pile"),
+                                Progress {
+                                    phase,
+                                    replayed: Some(100_000_000_000),
+                                    observed: Some(200_000_000_000),
+                                    ..Default::default()
+                                },
+                            ))
+                            .rect;
+                    },
+                );
+                let labels: Vec<_> = output
+                    .shapes
+                    .iter()
+                    .filter_map(|shape| match &shape.shape {
+                        egui::Shape::Text(text) => Some((
+                            text.galley.job.text.as_str(),
+                            egui::Rect::from_min_size(text.pos, text.galley.size()),
+                        )),
+                        _ => None,
+                    })
+                    .collect();
+                assert!(labels.iter().all(|(text, bounds)| !text.contains("ready")
+                    && !text.contains('↻')
+                    && rail.contains_rect(*bounds)));
+                let (_, path) = labels
+                    .iter()
+                    .find(|(text, _)| text.contains('/'))
+                    .expect("visible path");
+                let (_, bytes) = labels
+                    .iter()
+                    .find(|(text, _)| *text == "100.0/200.0 GB")
+                    .expect("visible byte counts");
+                assert!(path.right() < bytes.left());
+                assert_eq!(
+                    labels.iter().any(|(text, _)| *text == phase_label(phase)),
+                    phase != Phase::Ready
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn tick_keeps_its_position_without_striking_either_label() {
+        use egui::{pos2, Rect};
+        let inner = Rect::from_min_max(pos2(2.0, 2.0), pos2(178.0, 26.0));
+        let path = Rect::from_min_max(pos2(6.0, 9.0), pos2(80.0, 19.0));
+        let bytes = Rect::from_min_max(pos2(88.0, 4.0), pos2(174.0, 14.0));
+        let phase = Rect::from_min_max(pos2(136.0, 16.0), pos2(174.0, 24.0));
+        for x in [2.0, 50.0, 90.0, 150.0, 178.0] {
+            let labels = [path, bytes, phase];
+            let spans = tick_spans(inner, x, &labels);
+            assert!(!spans.is_empty());
+            for (top, bottom) in spans {
+                assert!(top >= inner.top() && top < bottom && bottom <= inner.bottom());
+                assert!(labels.iter().all(|label| x < label.left()
+                    || x > label.right()
+                    || bottom <= label.top()
+                    || top >= label.bottom()));
+            }
         }
     }
 }

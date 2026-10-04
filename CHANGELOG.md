@@ -4,9 +4,10 @@ All notable changes to this project will be documented in this file.
 
 ## Unreleased
 
-- Compact native pile instrument: configured path, measured byte rail and replay
-  watermark; public data-only `PileProgress` also serves preflight/error faces
-  without implying a refresh action or snapshot readiness.
+- Compact native pile instrument: configured path and measured bytes inside one
+  28-point rail, with a replay watermark; no ready label or refresh button.
+  Automatic snapshot publication is unchanged. Public data-only `PileProgress`
+  also serves preflight/error faces without implying snapshot readiness.
 - Lazy single-input and tuple `.map` expressions share `.read(ctx)` with state
   handles; opt-in `.memo(stable_key)` retains one current-input result without
   a cache card. `nb.view(value.tap())` displays a lazy Debug view. Dependencies
