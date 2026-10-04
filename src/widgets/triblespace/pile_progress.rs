@@ -1,5 +1,6 @@
 //! Latest-value loading telemetry and a reusable, data-only progress instrument.
-//! No pile handles, request queues, paths, or notebook state live in the widget.
+//! No resource, query, or notebook ownership lives in the widget.
+use std::path::Path;
 use std::time::{Duration, Instant};
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -90,119 +91,259 @@ pub fn replay_batch<E>(
     Ok(Batch::Yield)
 }
 
-/// Generic instrument face: labels are supplied by its caller, so the same
-/// primitive can show bytes, work units, or another bounded measurement. It is
-/// an ordinary egui widget suitable for a Lissajous `nb.view`/retained state.
-pub struct Instrument<'a> {
-    pub title: &'a str,
-    pub amount: &'a str,
-    pub fraction: Option<f32>,
-    pub accent: egui::Color32,
-    pub stages: [&'a str; 3],
-    pub note: &'a str,
+/// Data-only face of a pile resource. No file is opened or read here.
+///
+/// The tick measures replayed bytes, not snapshot readiness. The returned
+/// response is clicked only by the small refresh/retry affordance; its caller
+/// decides whether to request a refresh. Errors stay visible below the rail.
+pub struct PileProgress<'a> {
+    path: &'a Path,
+    progress: Progress,
+    error: Option<&'a str>,
+    refreshable: bool,
 }
-impl egui::Widget for Instrument<'_> {
+impl<'a> PileProgress<'a> {
+    pub fn new(path: &'a Path, progress: Progress) -> Self {
+        Self {
+            path,
+            progress,
+            error: None,
+            refreshable: true,
+        }
+    }
+
+    pub fn error(mut self, error: Option<&'a str>) -> Self {
+        self.error = error;
+        self
+    }
+
+    /// Omit the action when the caller has no refresh/retry operation yet.
+    pub fn refreshable(mut self, refreshable: bool) -> Self {
+        self.refreshable = refreshable;
+        self
+    }
+}
+
+impl egui::Widget for PileProgress<'_> {
     fn ui(self, ui: &mut egui::Ui) -> egui::Response {
-        use egui::{pos2, vec2, Align2, FontId, Sense, Stroke};
+        use egui::{pos2, vec2, Align2, FontId, Sense, Stroke, StrokeKind};
         let (rect, response) =
-            ui.allocate_exact_size(vec2(ui.available_width(), 126.0), Sense::hover());
+            ui.allocate_exact_size(vec2(ui.available_width().max(1.0), 48.0), Sense::hover());
         let painter = ui.painter_at(rect.intersect(ui.clip_rect()));
-        let area = rect.shrink2(vec2(18.0, 14.0));
         let text = ui.visuals().text_color();
         let weak = ui.visuals().weak_text_color();
+        let path_area = egui::Rect::from_min_max(
+            rect.min,
+            pos2(
+                rect.right() - if self.refreshable { 22.0 } else { 0.0 },
+                rect.top() + 17.0,
+            ),
+        );
+        let path_font = FontId::monospace(10.0);
+        let path = self.path.to_string_lossy();
+        let label = middle_elide(&path, path_area.width(), |label| {
+            painter
+                .layout_no_wrap(label.to_owned(), path_font.clone(), weak)
+                .size()
+                .x
+        });
         painter.text(
-            area.left_top(),
-            Align2::LEFT_TOP,
-            self.title,
-            FontId::monospace(11.0),
+            path_area.left_center(),
+            Align2::LEFT_CENTER,
+            label,
+            path_font,
             weak,
         );
-        painter.text(
-            pos2(area.left(), area.top() + 22.0),
-            Align2::LEFT_TOP,
-            self.amount,
-            FontId::monospace(18.0),
-            text,
-        );
-        let rail = egui::Rect::from_min_size(
-            pos2(area.left(), area.top() + 53.0),
-            vec2(area.width(), 3.0),
-        );
-        painter.rect_filled(rail, 1.5, ui.visuals().faint_bg_color);
-        if let Some(fraction) = self.fraction.filter(|value| value.is_finite()) {
-            let filled = egui::Rect::from_min_size(
-                rail.min,
-                vec2(rail.width() * fraction.clamp(0.0, 1.0), rail.height()),
-            );
-            painter.rect_filled(filled, 1.5, self.accent);
+        // Debug retains escaped non-UTF8 path bytes instead of silently replacing
+        // them. Ordinary UTF-8 paths are shown verbatim, including all parents.
+        let full_path = self
+            .path
+            .to_str()
+            .map(str::to_owned)
+            .unwrap_or_else(|| format!("{:?}", self.path));
+        ui.interact(path_area, response.id.with("path"), Sense::hover())
+            .on_hover_text(full_path);
+
+        let retry = self.progress.phase == Phase::Failed;
+        let refresh = self.refreshable.then(|| {
+            ui.put(
+                egui::Rect::from_min_size(pos2(rect.right() - 18.0, rect.top()), vec2(18.0, 17.0)),
+                egui::Button::new("↻").frame(false).small(),
+            )
+            .on_hover_text(if retry {
+                "Retry this source"
+            } else {
+                "Refresh this source"
+            })
+        });
+
+        let rail = egui::Rect::from_min_max(pos2(rect.left(), rect.top() + 20.0), rect.max);
+        let stroke = if retry {
+            ui.visuals().error_fg_color
         } else {
-            painter.line_segment(
-                [rail.left_center(), rail.right_center()],
-                Stroke::new(1.0, weak),
-            );
-        }
-        for (index, label) in self.stages.iter().enumerate() {
-            let x = area.left() + index as f32 * area.width() / 3.0;
-            let column = egui::Rect::from_min_size(
-                pos2(x, area.top() + 66.0),
-                vec2(area.width() / 3.0, 17.0),
-            );
-            painter.with_clip_rect(column.intersect(rect)).text(
-                column.min,
-                Align2::LEFT_TOP,
-                label,
-                FontId::monospace(10.0),
-                weak,
-            );
-        }
-        painter.text(
-            pos2(area.left(), area.top() + 87.0),
-            Align2::LEFT_TOP,
-            self.note,
-            FontId::proportional(10.0),
-            weak,
+            weak
+        };
+        painter.rect_stroke(rail, 2.0, Stroke::new(1.0, stroke), StrokeKind::Inside);
+        let inner = rail.shrink(2.0);
+        let fraction = self.progress.replay_fraction();
+        let watermark = fraction.map(|fraction| inner.left() + inner.width() * fraction);
+        let unread = egui::Rect::from_min_max(
+            pos2(watermark.unwrap_or(inner.left()), inner.top()),
+            inner.max,
         );
+        if unread.width() > 0.0 {
+            let hatch = painter.with_clip_rect(unread.intersect(painter.clip_rect()));
+            let mut x = unread.left() - unread.height();
+            while x < unread.right() {
+                hatch.line_segment(
+                    [
+                        pos2(x, unread.bottom()),
+                        pos2(x + unread.height(), unread.top()),
+                    ],
+                    Stroke::new(0.75, weak.gamma_multiply(0.18)),
+                );
+                x += 8.0;
+            }
+        }
+        let amount = rail_label(self.progress);
+        let mut font = FontId::monospace(11.0);
+        while font.size > 8.0
+            && painter
+                .layout_no_wrap(amount.clone(), font.clone(), text)
+                .size()
+                .x
+                > inner.width() - 8.0
+        {
+            font.size -= 0.5;
+        }
+        let galley = painter.layout_no_wrap(amount, font, text);
+        let label_rect = egui::Rect::from_center_size(inner.center(), galley.size()).expand(2.0);
+        if let Some(x) = watermark {
+            let tick = Stroke::new(2.0, if retry { stroke } else { text });
+            if x >= label_rect.left() && x <= label_rect.right() {
+                // The watermark stays at its measured byte position without
+                // striking through the amount when it crosses the label.
+                for (top, bottom) in [
+                    (inner.top(), label_rect.top()),
+                    (label_rect.bottom(), inner.bottom()),
+                ] {
+                    if top < bottom {
+                        painter.line_segment([pos2(x, top), pos2(x, bottom)], tick);
+                    }
+                }
+            } else {
+                painter.line_segment([pos2(x, inner.top()), pos2(x, inner.bottom())], tick);
+            }
+        }
+        painter
+            .with_clip_rect(inner.intersect(painter.clip_rect()))
+            .galley(inner.center() - galley.size() * 0.5, galley, text);
+        let detail = format!(
+            "{}\nReplayed: {}\nObserved: {}",
+            phase_label(self.progress.phase),
+            exact_bytes(self.progress.replayed),
+            exact_bytes(self.progress.observed)
+        );
+        ui.interact(rail, response.id.with("bytes"), Sense::hover())
+            .on_hover_text(detail);
+        let response = match refresh {
+            Some(refresh) => response.union(refresh),
+            None => response,
+        };
+        if let Some(error) = self.error {
+            ui.add(
+                egui::Label::new(egui::RichText::new(error).color(ui.visuals().error_fg_color))
+                    .wrap(),
+            );
+        }
         response
     }
 }
 
-fn bytes(value: u64) -> String {
-    if value >= 1 << 30 {
-        format!("{:.2} GiB", value as f64 / (1_u64 << 30) as f64)
-    } else if value >= 1 << 20 {
-        format!("{:.1} MiB", value as f64 / (1_u64 << 20) as f64)
-    } else if value >= 1 << 10 {
-        format!("{:.1} KiB", value as f64 / (1_u64 << 10) as f64)
-    } else {
-        format!("{value} B")
+fn middle_elide(text: &str, width: f32, measure: impl Fn(&str) -> f32) -> String {
+    if measure(text) <= width {
+        return text.to_owned();
+    }
+    if measure("…") > width {
+        return String::new();
+    }
+    let chars: Vec<_> = text.chars().collect();
+    // Prefer keeping the immediate parent with the basename: two different
+    // project.pile paths should not both collapse to the same trailing name.
+    let tail = text
+        .rsplit('/')
+        .take(2)
+        .map(|part| part.chars().count())
+        .sum::<usize>()
+        + 1;
+    let (mut low, mut high) = (0, chars.len());
+    let candidate = |keep: usize| {
+        let left = if keep < 2 {
+            0
+        } else {
+            keep.saturating_sub(tail).min(keep / 3).max(1)
+        };
+        let right = keep - left;
+        chars[..left]
+            .iter()
+            .chain(std::iter::once(&'…'))
+            .chain(chars[chars.len() - right..].iter())
+            .collect::<String>()
+    };
+    while low < high {
+        let middle = (low + high + 1) / 2;
+        if measure(&candidate(middle)) <= width {
+            low = middle;
+        } else {
+            high = middle - 1;
+        }
+    }
+    candidate(low)
+}
+
+fn exact_bytes(value: Option<u64>) -> String {
+    value
+        .map(|value| format!("{value} bytes"))
+        .unwrap_or_else(|| "unknown".into())
+}
+
+fn phase_label(phase: Phase) -> &'static str {
+    match phase {
+        Phase::Opening => "opening",
+        Phase::Replay => "replay",
+        Phase::Snapshot => "snapshot",
+        Phase::Ready => "ready",
+        Phase::Failed => "failed",
     }
 }
 
-pub fn show(ui: &mut egui::Ui, progress: Progress) {
-    let amount = match (progress.replayed, progress.observed) {
-        (Some(done), Some(total)) => format!("{} / {}", bytes(done), bytes(total)),
-        _ => "Opening resource".into(),
+fn rail_label(progress: Progress) -> String {
+    let maximum = progress
+        .replayed
+        .into_iter()
+        .chain(progress.observed)
+        .max()
+        .unwrap_or(0);
+    let mut unit = 1_u64;
+    let mut suffix = "B";
+    for next in ["kB", "MB", "GB", "TB", "PB", "EB"] {
+        if maximum / unit < 1000 {
+            break;
+        }
+        unit *= 1000;
+        suffix = next;
+    }
+    let value = |value: Option<u64>| match value {
+        Some(value) if unit == 1 => value.to_string(),
+        Some(value) => format!("{:.1}", value as f64 / unit as f64),
+        None => "?".into(),
     };
-    let replay = match progress.pending_bytes() {
-        Some(pending) if pending > 0 => format!("+{}", bytes(pending)),
-        Some(_) if progress.replay_fraction().is_some() => "bytes replayed".into(),
-        _ => "bytes pending".into(),
-    };
-    let stage = match progress.phase {
-        Phase::Opening => "opening…",
-        Phase::Replay => "replaying…",
-        Phase::Snapshot => "snapshot…",
-        Phase::Ready => "snapshot ready",
-        Phase::Failed => "unavailable",
-    };
-    ui.add(Instrument {
-        title: "PILE RESOURCE",
-        amount: &amount,
-        fraction: progress.replay_fraction(),
-        accent: egui::Color32::from_rgb(53, 203, 214),
-        stages: [&replay, stage, ""],
-        note: "",
-    });
+    format!(
+        "{}/{} {suffix} · {}",
+        value(progress.replayed),
+        value(progress.observed),
+        phase_label(progress.phase)
+    )
 }
 
 #[cfg(test)]
@@ -280,8 +421,16 @@ mod tests {
     }
     #[test]
     fn instrument_is_bounded_at_narrow_and_wide_widths() {
-        for width in [320.0, 640.0, 1100.0] {
+        for (width, dark) in [180.0, 240.0, 360.0, 640.0, 1100.0]
+            .into_iter()
+            .flat_map(|width| [(width, false), (width, true)])
+        {
             let context = egui::Context::default();
+            context.set_visuals(if dark {
+                egui::Visuals::dark()
+            } else {
+                egui::Visuals::light()
+            });
             let output = context.run_ui(
                 egui::RawInput {
                     screen_rect: Some(egui::Rect::from_min_size(
@@ -291,17 +440,20 @@ mod tests {
                     ..Default::default()
                 },
                 |ui| {
-                    show(
-                        ui,
+                    let response = ui.add(PileProgress::new(
+                        Path::new(
+                            "/public/observations/another-team/long-source-directory/project.pile",
+                        ),
                         Progress {
-                            replayed: Some(1 << 30),
-                            observed: Some(2 << 30),
+                            replayed: Some(84_325_103_000),
+                            observed: Some(233_305_898_752),
                             phase: Phase::Snapshot,
                             ..Default::default()
                         },
-                    );
+                    ));
+                    assert_eq!(response.rect.height(), 48.0);
                     assert!(ui.min_rect().width() <= width);
-                    assert!(ui.min_rect().height() <= 150.0);
+                    assert!(ui.min_rect().height() <= 52.0);
                 },
             );
             assert!(!output.shapes.is_empty());
@@ -316,6 +468,144 @@ mod tests {
                     );
                 }
             }
+        }
+    }
+
+    #[test]
+    fn labels_preserve_unknowns_and_do_not_promote_byte_completion() {
+        assert_eq!(rail_label(Progress::default()), "?/? B · opening");
+        let mut progress = Progress {
+            replayed: Some(1_000),
+            observed: Some(1_000),
+            phase: Phase::Replay,
+            ..Default::default()
+        };
+        assert_eq!(rail_label(progress), "1.0/1.0 kB · replay");
+        progress.phase = Phase::Snapshot;
+        assert!(rail_label(progress).ends_with("snapshot"));
+        progress.phase = Phase::Ready;
+        assert!(rail_label(progress).ends_with("ready"));
+        progress.observed = Some(2_000);
+        assert_eq!(progress.pending_bytes(), Some(1_000));
+        assert_eq!(progress.replay_fraction(), Some(0.5));
+        assert_eq!(rail_label(progress), "1.0/2.0 kB · ready");
+        progress.observed = None;
+        assert_eq!(progress.replay_fraction(), None);
+        assert_eq!(rail_label(progress), "1.0/? kB · ready");
+        progress.observed = Some(0);
+        assert_eq!(progress.replay_fraction(), None);
+        progress.replayed = Some(0);
+        assert_eq!(rail_label(progress), "0/0 B · ready");
+        assert_eq!(progress.replay_fraction(), Some(1.0));
+    }
+
+    #[test]
+    fn path_elision_keeps_context_and_is_unicode_safe() {
+        let measure = |text: &str| text.chars().count() as f32;
+        let path = "/public/Δelta/other-source/project.pile";
+        assert_eq!(middle_elide(path, 100.0, measure), path);
+        let short = middle_elide(path, 29.0, measure);
+        assert!(short.contains('…'));
+        assert!(short.starts_with('/'));
+        assert!(short.ends_with("source/project.pile"));
+        assert!(measure(&short) <= 29.0);
+        assert_eq!(middle_elide(path, 0.0, measure), "");
+        assert_ne!(
+            middle_elide(
+                "/public/observations/delta-team/project.pile",
+                26.0,
+                measure
+            ),
+            middle_elide(
+                "/public/observations/coast-team/project.pile",
+                26.0,
+                measure
+            )
+        );
+    }
+
+    #[test]
+    fn errors_remain_visible_and_action_can_be_absent() {
+        let context = egui::Context::default();
+        let error = "Permission denied while opening /public/source/project.pile";
+        let output = context.run_ui(
+            egui::RawInput {
+                screen_rect: Some(egui::Rect::from_min_size(
+                    egui::Pos2::ZERO,
+                    egui::vec2(180.0, 250.0),
+                )),
+                ..Default::default()
+            },
+            |ui| {
+                ui.add(
+                    PileProgress::new(
+                        Path::new("/public/source/project.pile"),
+                        Progress {
+                            phase: Phase::Failed,
+                            ..Default::default()
+                        },
+                    )
+                    .error(Some(error))
+                    .refreshable(false),
+                );
+                assert!(ui.min_rect().width() <= 180.0);
+            },
+        );
+        let text: Vec<_> = output
+            .shapes
+            .iter()
+            .filter_map(|shape| match &shape.shape {
+                egui::Shape::Text(text) => Some(text.galley.job.text.as_str()),
+                _ => None,
+            })
+            .collect();
+        assert!(text.contains(&error));
+        assert!(!text.contains(&"↻"));
+        assert!(text.iter().any(|text| text.ends_with("failed")));
+    }
+
+    #[test]
+    fn only_the_refresh_affordance_requests_an_action() {
+        for (point, refreshable, expected) in [
+            (egui::pos2(271.0, 8.5), true, true),
+            (egui::pos2(140.0, 34.0), true, false),
+            (egui::pos2(271.0, 8.5), false, false),
+        ] {
+            let context = egui::Context::default();
+            let mut clicked = false;
+            for pressed in [None, Some(true), Some(false)] {
+                let mut events = vec![egui::Event::PointerMoved(point)];
+                if let Some(pressed) = pressed {
+                    events.push(egui::Event::PointerButton {
+                        pos: point,
+                        button: egui::PointerButton::Primary,
+                        pressed,
+                        modifiers: Default::default(),
+                    });
+                }
+                let _ = context.run_ui(
+                    egui::RawInput {
+                        screen_rect: Some(egui::Rect::from_min_size(
+                            egui::Pos2::ZERO,
+                            egui::vec2(280.0, 160.0),
+                        )),
+                        events,
+                        ..Default::default()
+                    },
+                    |ui| {
+                        clicked |= ui
+                            .add(
+                                PileProgress::new(
+                                    Path::new("/public/project.pile"),
+                                    Progress::default(),
+                                )
+                                .refreshable(refreshable),
+                            )
+                            .clicked();
+                    },
+                );
+            }
+            assert_eq!(clicked, expected);
         }
     }
 }

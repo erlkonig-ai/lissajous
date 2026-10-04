@@ -27,7 +27,7 @@ use triblespace::prelude::VerifyingKey;
 #[path = "pile_progress.rs"]
 mod progress;
 use progress::{replay_batch, Batch};
-pub use progress::{Phase, Progress};
+pub use progress::{Phase, PileProgress, Progress};
 
 const OBSERVE_INTERVAL: Duration = Duration::from_secs(2);
 
@@ -131,6 +131,7 @@ impl Shared {
 /// be unbounded. The owner exits between records or after the final snapshot,
 /// and drops its read-only handle. Already published snapshots remain owned.
 pub struct PileCell {
+    path: PathBuf,
     refresh: Option<mpsc::SyncSender<()>>,
     stop: Arc<AtomicBool>,
     shared: Arc<Shared>,
@@ -142,6 +143,7 @@ impl PileCell {
     }
 
     fn with_interval(options: PileOpen, interval: Duration) -> Self {
+        let path = options.path.clone();
         let (refresh, requests) = mpsc::sync_channel(1);
         let stop = Arc::new(AtomicBool::new(false));
         let shared = Arc::new(Shared::default());
@@ -183,6 +185,7 @@ impl PileCell {
             shared.fail(error.into());
         }
         Self {
+            path,
             refresh: Some(refresh),
             stop,
             shared,
@@ -196,19 +199,9 @@ impl PileCell {
             *context = Some(ui.ctx().clone());
         }
         let delay = if let Some(read) = self.read() {
-            progress::show(ui, read.progress);
-            if let Some(error) = &read.error {
-                ui.colored_label(ui.visuals().error_fg_color, error.to_string());
-            }
+            let error = read.error.as_ref().map(ToString::to_string);
             if ui
-                .add(
-                    crate::widgets::Button::new(if read.error.is_some() {
-                        "Retry"
-                    } else {
-                        "Refresh"
-                    })
-                    .latched(read.progress.active()),
-                )
+                .add(PileProgress::new(&self.path, read.progress).error(error.as_deref()))
                 .clicked()
             {
                 self.refresh();
@@ -920,6 +913,7 @@ mod tests {
     fn gui_read_never_waits_for_publication_lock() {
         let shared = Arc::new(Shared::default());
         let cell = PileCell {
+            path: PathBuf::from("/synthetic/locked-publication.pile"),
             refresh: None,
             stop: Arc::new(AtomicBool::new(false)),
             shared: Arc::clone(&shared),

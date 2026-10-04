@@ -290,6 +290,13 @@ status. Collection selection, query tasks, result caches and query errors belong
 to consumers, not this cell. Share one cell for consumers of the same source;
 detaching a card does not reopen its pile.
 
+The compact face shows the configured path, a replay-watermark tick and measured
+bytes inside one rail; hatched space is unread or unknown, not simulated progress.
+Byte labels use decimal units (GB), with exact byte counts and the full path on
+hover. `PileProgress::new(path, progress).error(error).refreshable(false)` renders
+the same data-only face during a caller's preflight, without opening a resource
+or advertising a refresh action that caller cannot perform.
+
 Use `--no-default-features --features triblespace-pile` for this example's lean
 graph: native storage and parallel queries, without the facade's GPU, WASM or
 object-store defaults. The existing `triblespace` feature also includes the pile
