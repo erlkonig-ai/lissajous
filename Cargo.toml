@@ -181,6 +181,10 @@ name = "pile_instrument"
 required-features = ["triblespace-pile"]
 
 [[example]]
+name = "pile_inspectors"
+required-features = ["triblespace-pile"]
+
+[[example]]
 name = "minla"
 required-features = ["cubecl", "plots"]
 
