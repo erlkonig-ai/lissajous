@@ -130,7 +130,7 @@ impl egui::Widget for PileProgress<'_> {
         } else {
             weak
         };
-        painter.rect_stroke(rail, 2.0, Stroke::new(1.0, stroke), StrokeKind::Inside);
+        painter.rect_stroke(rail, 0.0, Stroke::new(1.0, stroke), StrokeKind::Inside);
         let inner = rail.shrink(2.0);
         let right = inner.right() - 4.0;
         let active = self.progress.phase != Phase::Ready;
@@ -487,6 +487,9 @@ mod tests {
             );
             assert!(!output.shapes.is_empty());
             for clipped in &output.shapes {
+                if let egui::Shape::Rect(rect) = &clipped.shape {
+                    assert_eq!(rect.corner_radius, egui::CornerRadius::ZERO);
+                }
                 if let egui::Shape::Text(text) = &clipped.shape {
                     let bounds = egui::Rect::from_min_size(text.pos, text.galley.size());
                     assert!(
