@@ -155,8 +155,9 @@ selection: StateId<Option<u64>>  <---  map's private camera + prepared geometry
 The visible selection card shows the public value and offers a clear button.
 The map receives that handle, keeps its own `MapState` private inside a module,
 and publishes only selection changes. The summary accepts the same typed
-selection handle; it never reads `MapState`. Its own `DerivedState` recomputes a
-small label only when the selection changes. Replacing the map with a list
+selection handle; it never reads `MapState`. A lazy, memoized expression computes
+a small label only when the selection changes, without a separate cache card.
+Replacing the map with a list
 selector leaves the summary unchanged. The geometry and IDs are synthetic;
 there is no dataset reader, network service or domain-specific backend hidden
 in the example.
@@ -172,8 +173,63 @@ state ownership, inputs or resource lifetime.
 An initializer does not rerun when another cell changes. A stateless `view`
 reads a `StateId` each paint; a stateful consumer can read the same handle while
 retaining its own axes, cache and pending tasks. Read or copy the input, release
-its guard, then decide what to recompute. The worked map example does exactly
-this: its summary owns `DerivedState`, whose key is the current selection.
+its guard, then decide what to recompute.
+
+For ordinary value flow, `ReadValue` gives state handles and lazy recipes a
+common `.read(ctx)` interface. A handle returns a read guard; a recipe returns
+an owned `Arc`. `.map` owns its inputs and closure but does no work until read:
+
+```rust
+use lissajous::prelude::*;
+
+fn expensive_calculation(left: &u32, right: &u32) -> u32 {
+    left + right // Stand-in for your synchronous calculation.
+}
+
+fn totals(nb: &mut NotebookCtx, left: StateId<u32>, right: StateId<u32>) {
+    let total = (left, right).map(expensive_calculation).memo("total");
+    // Inspect an intermediate using the same view/read interface.
+    nb.view(move |ctx| { ctx.label(format!("Total: {}", total.read(ctx))); });
+    let label = total.map(|total| format!("Downstream: {total}"));
+    nb.view(move |ctx| { ctx.label(label.read(ctx).as_str()); });
+}
+```
+
+Reading the intermediate forces only its dependencies, not downstream recipes.
+The downstream read reuses `total`'s memoized result. Use a single handle's
+`.map(|value| ...)`, or tuples of one to eight readable inputs with separate
+borrowed arguments. Chains receive the final read's context throughout; handles
+and recipes retain no notebook context. Recipes are `Copy` when their inputs
+and closure are, but captured closures need not be `Copy`. Ordinary `.map`
+computes on **every** read, without cloning source state or requiring `Clone`.
+
+`.memo(stable_key)` opts a mapping into a store-backed `DerivedState` cache.
+Rebuilding the recipe each frame reuses one slot in that notebook's state store,
+independent of which card reads it; it creates no visible card. The stable key
+names the computation, while its current input values determine validity. Use
+distinct stable keys for distinct computations, even when their types match.
+Reusing a key for a different computation is a programming error, not automatic
+invalidation. Changing settings belong in the inputs, not a continually changing
+stable key, which would create additional retained slots. A hit skips the
+wrapped mapping closure, **not** input resolution or upstream maps. Memoize an
+expensive upstream mapping separately if needed.
+
+Only memoization requires cloning its explicit input values (which must also
+be `PartialEq + Send + Sync + 'static`); outputs must be `Send + Sync + 'static`.
+Project a small selection or revision out of large state before the expensive
+memoized mapping. Cloning the whole instrument just to read it is unnecessary.
+Every changing parameter must be an explicit input: replacing a closure or
+changing its captures does not invalidate a memo. For example, make a changing
+multiplier another input, `(value, multiplier).map(|v, m| v * m)`, rather than
+capturing it. Immutable source captures need an explicit revision dependency
+when their identity changes.
+
+All of this is synchronous pull evaluation, not topological scheduling or an
+atomic multi-state snapshot. Input guards are released before memo cache locks
+are acquired; ordinary maps borrow their inputs during computation. Keep lock
+orders consistent, never read a write-locked cell's own handle in its callback,
+and never recursively read a memo's own slot from its computation. Heavy work
+still belongs off the paint path. The map example's summary now uses this API.
 
 `DerivedState<K, T>::get(key, compute)` is a synchronous, single-current-key memo.
 Use it for inexpensive derivations, not heavy I/O or decoding on the paint path.

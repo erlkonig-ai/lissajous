@@ -21,19 +21,17 @@ fn main(nb: &mut NotebookCtx) {
 // This consumer could receive exactly the same input from a list selector.
 // It neither knows about nor locks the map's camera or prepared geometry.
 fn selection_summary(nb: &mut NotebookCtx, selection: StateId<Option<u64>>) {
-    nb.state(
-        "selection-summary",
-        DerivedState::<Option<u64>, String>::default,
-        move |ctx, label| {
-            let selected = *selection.read(ctx); // Release the guard before drawing.
-            let text = label.get(selected, |key| match key {
-                Some(id) => format!("Ready to inspect entity {id}"),
-                None => "Choose an entity with any selector".to_owned(),
-            });
-            ctx.heading("Independent consumer");
-            ctx.label(text.as_str());
-        },
-    );
+    let label = selection
+        .map(|selected| match selected {
+            Some(id) => format!("Ready to inspect entity {id}"),
+            None => "Choose an entity with any selector".to_owned(),
+        })
+        .memo("selection-summary");
+    nb.view(move |ctx| {
+        let text = label.read(ctx);
+        ctx.heading("Independent consumer");
+        ctx.label(text.as_str());
+    });
 }
 
 mod map {

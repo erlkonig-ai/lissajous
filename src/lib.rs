@@ -10,8 +10,10 @@
 //! bodies run on repaint, while keyed state survives. Lissajous does not analyze
 //! source code or automatically schedule a dependency graph. Use
 //! [`NotebookCtx::state`] for lazy retained state, [`state::StateId`] for
-//! explicit typed access, and [`dataflow::DerivedState`] for small synchronous
-//! derivations keyed by all relevant inputs. [`dataflow::ComputedState`] supplies
+//! explicit typed access, and [`dataflow::ReadValue::map`] for lazy expressions.
+//! [`dataflow::Mapped::memo`] opts into store-backed caching without an extra
+//! card; [`dataflow::DerivedState`] supports explicitly owned synchronous caches.
+//! [`dataflow::ComputedState`] supplies
 //! a native background result slot, not keyed cancellation or latest-request
 //! scheduling; asynchronous consumers must preserve input identity and reject
 //! stale answers. Keep heavy work off paint and share a resource session or
@@ -34,7 +36,7 @@ pub mod capture;
 pub mod card_ctx;
 /// Card trait and built-in card types (stateful, stateless).
 pub mod cards;
-/// Background computation with [`ComputedState`](dataflow::ComputedState).
+/// Lazy expressions, opt-in memoization, and background computation.
 pub mod dataflow;
 pub(crate) mod floating;
 /// One force-directed layout and one drawing kit, shared by every graph view.

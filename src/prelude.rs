@@ -16,6 +16,7 @@ pub use crate::card_ctx::GRID_GUTTER;
 pub use crate::card_ctx::GRID_ROW_MODULE;
 pub use crate::dataflow::ComputedState;
 pub use crate::dataflow::DerivedState;
+pub use crate::dataflow::{Map, Mapped, Memo, ReadValue};
 #[cfg(feature = "markdown")]
 pub use crate::md;
 #[cfg(feature = "markdown")]

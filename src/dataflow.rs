@@ -1,5 +1,8 @@
 use eframe::egui;
 
+mod lazy;
+pub use lazy::{Map, Mapped, Memo, ReadValue};
+
 /// Holds a value that can be recomputed asynchronously in a background thread.
 ///
 /// Use [`spawn`](Self::spawn) to kick off a computation and [`poll`](Self::poll)
