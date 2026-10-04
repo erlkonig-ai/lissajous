@@ -407,7 +407,9 @@ impl Session {
             value.observation
         };
         self.attempt_refresh = observation.refresh;
-        let Some((snapshot, seconds)) = prepare_snapshot(&mut opened.pile, shared, stop)? else {
+        let Some((snapshot, seconds)) =
+            prepare_snapshot(&mut opened.pile, shared, || stop.load(Ordering::Relaxed))?
+        else {
             return Ok(false);
         };
         let after = Stamp::at(&self.options.path)?;
@@ -466,7 +468,7 @@ impl Session {
 fn prepare_snapshot(
     pile: &mut Pile,
     shared: &Shared,
-    stop: &AtomicBool,
+    cancelled: impl Fn() -> bool,
 ) -> Result<Option<(PileSnapshot, f64)>, ReadError> {
     let started = Instant::now();
     let target = pile.backing_file_metadata()?.len();
@@ -477,12 +479,7 @@ fn prepare_snapshot(
     });
     let mut published = Instant::now();
     loop {
-        let batch = replay_batch(
-            &mut offset,
-            target,
-            || stop.load(Ordering::Relaxed),
-            || pile.refresh_next(),
-        )?;
+        let batch = replay_batch(&mut offset, target, &cancelled, || pile.refresh_next())?;
         if batch != Batch::Yield || published.elapsed() >= Duration::from_millis(50) {
             let observed = pile.backing_file_metadata()?.len();
             shared.update(|value| value.progress.bytes(offset, observed));
@@ -494,14 +491,14 @@ fn prepare_snapshot(
             Batch::Yield => std::thread::yield_now(),
         }
     }
-    if stop.load(Ordering::Relaxed) {
+    if cancelled() {
         return Ok(None);
     }
     shared.update(|value| value.progress.phase = Phase::Snapshot);
     let snapshot = pile.snapshot()?;
     let observed = pile.backing_file_metadata()?.len();
     shared.update(|value| value.progress.bytes(snapshot.prefix_len() as u64, observed));
-    if stop.load(Ordering::Relaxed) {
+    if cancelled() {
         return Ok(None);
     }
     Ok(Some((snapshot, started.elapsed().as_secs_f64())))
@@ -857,6 +854,34 @@ mod tests {
             .unwrap());
         assert!(shared.value.lock().unwrap().snapshot.is_none());
         assert_eq!(session.opened.as_ref().unwrap().pile.refreshed_len(), 0);
+    }
+
+    #[test]
+    fn cancellation_after_complete_replay_skips_snapshot_phase() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("source.pile");
+        File::create(&path).unwrap();
+        append(&path, "one complete record");
+        let mut pile = Pile::with_host(PileFile::open_read_only(&path).unwrap(), None);
+        let shared = Shared::default();
+        let checks = std::cell::Cell::new(0);
+        let result = prepare_snapshot(&mut pile, &shared, || {
+            let check = checks.get() + 1;
+            checks.set(check);
+            // First check admits the record, second observes its completed
+            // target, third is the separate before-snapshot cancellation seam.
+            check >= 3
+        })
+        .unwrap();
+        assert!(result.is_none());
+        assert_eq!(
+            pile.refreshed_len() as u64,
+            std::fs::metadata(&path).unwrap().len()
+        );
+        let read = shared.value.lock().unwrap();
+        assert_eq!(read.progress.replay_fraction(), Some(1.0));
+        assert_eq!(read.progress.phase, Phase::Replay);
+        assert!(read.snapshot.is_none());
     }
 
     #[test]
