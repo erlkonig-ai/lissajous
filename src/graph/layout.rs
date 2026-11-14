@@ -63,6 +63,34 @@ pub struct LayoutParams {
     pub heat_floor: f32,
     /// Mean speed below which [`LayoutStats::quiet`] is set.
     pub quiet_speed: f32,
+
+    // The fields below are a candidate law, OFF at the default: each default
+    // reproduces the lifted law exactly, so `LayoutParams::default()` is still
+    // the wiki's law constant for constant. [`LayoutParams::atlas`] turns them
+    // on together.
+    /// Exponent `p` of the repulsion `repulsion / r^p`. `2.0` is the lifted
+    /// law; `1.0` is ForceAtlas2's.
+    pub repulsion_falloff: f32,
+    /// Give every node a mass of `1 + incident edges` (ForceAtlas2's
+    /// `deg + 1`). A node then repels in proportion to its mass, its springs
+    /// are divided by its own mass, and the anchor and the collision disc act
+    /// per unit mass. Read as forces, that is ForceAtlas2's
+    /// `k_r (d_i + 1)(d_j + 1) / r` repulsion with gravity proportional to
+    /// `d_i + 1`; read as accelerations, a hub is heavy rather than jittery.
+    /// Statics are the same either way, because only the equilibrium matters
+    /// and dividing a zero force by a mass leaves it zero.
+    pub degree_mass: bool,
+    /// Divide each spring by `sqrt(deg_i * deg_j)`, as the lifted law does.
+    /// `false` gives every edge the same spring, ForceAtlas2's attraction.
+    pub spring_degree_norm: bool,
+    /// LinLog attraction: a spring's pull grows with `ln(1 + d)` instead of
+    /// `d`, which tightens clusters and lengthens the edges between them.
+    pub spring_log: bool,
+    /// Radius, in world units, of a bare node's no-overlap disc; a node's own
+    /// disc is this times the wiki's degree scaling of its mark. `0.0` is off.
+    pub collide_radius: f32,
+    /// Spring constant on the overlap of two discs.
+    pub collide_k: f32,
 }
 
 impl Default for LayoutParams {
@@ -79,6 +107,54 @@ impl Default for LayoutParams {
             cool: 0.985,
             heat_floor: 0.05,
             quiet_speed: 0.5,
+            repulsion_falloff: 2.0,
+            degree_mass: false,
+            spring_degree_norm: true,
+            spring_log: false,
+            collide_radius: 0.0,
+            collide_k: 0.0,
+        }
+    }
+}
+
+impl LayoutParams {
+    /// A ForceAtlas2-shaped candidate for the wiki: degree-weighted `1/r`
+    /// repulsion, a linear anchor per unit mass, plain springs, and a
+    /// no-overlap disc the size of a mark.
+    ///
+    /// Why these, against the two defects of the lifted law on the live wiki:
+    ///
+    /// * **The ring.** Under `1/r²` repulsion a node outside the graph sees it
+    ///   as one central charge, and a degree-zero node has nothing but the
+    ///   linear anchor to hold it, so every unlinked note settles on one shell
+    ///   at `r³ = repulsion · n / anchor_k`. Under `1/r` repulsion the field
+    ///   inside a uniform disc of mass grows linearly with radius (Gauss's law
+    ///   in two dimensions), which is exactly the shape of a linear anchor, so
+    ///   the balance holds at EVERY radius inside the disc, not on one shell:
+    ///   the equilibrium is a disc of uniform mass density
+    ///   `anchor_k / (pi · repulsion)`, and an unlinked note is just one more
+    ///   unit of mass filling it. Weighting both terms by the same mass is what
+    ///   makes that true for every node at once.
+    /// * **The overlap.** Uniform density spreads the core, and the collision
+    ///   disc enforces a floor where springs would otherwise pull a cluster
+    ///   tighter than its marks.
+    ///
+    /// Scale: area per unit mass is `pi · repulsion / anchor_k`, here 1608
+    /// world units², a 40-unit spacing for a bare node, and a leaf pair rests
+    /// at `sqrt(4 · repulsion / attraction)`, also 40, so edges and gaps read
+    /// at the same size.
+    pub fn atlas() -> Self {
+        LayoutParams {
+            repulsion: 10.24,
+            attraction: 0.0256,
+            anchor_k: [0.02, 0.02],
+            repulsion_falloff: 1.0,
+            degree_mass: true,
+            spring_degree_norm: false,
+            spring_log: false,
+            collide_radius: super::marks::MARK,
+            collide_k: 0.5,
+            ..LayoutParams::default()
         }
     }
 }
@@ -419,7 +495,9 @@ impl ForceLayout {
             return self.stats;
         }
         let params = self.params;
-        self.tree.build(&self.pos);
+        let weights = params.degree_mass.then(|| self.csr.degrees());
+        self.tree.build(&self.pos, weights);
+        let mut collide_stack = Vec::new();
 
         // Two passes, because the lifted kernel is a Jacobi step: every node
         // read the SAME position array and wrote to a separate output. Folding
@@ -438,6 +516,8 @@ impl ForceLayout {
                 &self.pos,
                 params.repulsion,
                 params.theta,
+                params.repulsion_falloff,
+                weights,
                 &mut self.stack,
             );
 
@@ -445,11 +525,57 @@ impl ForceLayout {
             // lifted kernel's sum; found by lookup instead of by scanning
             // every edge for the ones that touch this node.
             let degree = self.csr.degree(index);
+            // With `degree_mass` off, `local` IS the force and the sums land in
+            // the same order the lifted kernel added them.
+            let mut local = if params.degree_mass {
+                [0.0f32; 2]
+            } else {
+                force
+            };
             for &other in self.csr.neighbours(index) {
-                let weight = params.attraction / (degree * self.csr.degree(other as usize)).sqrt();
+                let weight = if params.spring_degree_norm {
+                    params.attraction / (degree * self.csr.degree(other as usize)).sqrt()
+                } else {
+                    params.attraction
+                };
                 let target = self.pos[other as usize];
-                force[0] += (target[0] - point[0]) * weight;
-                force[1] += (target[1] - point[1]) * weight;
+                let (dx, dy) = (target[0] - point[0], target[1] - point[1]);
+                let weight = if params.spring_log {
+                    let dist = (dx * dx + dy * dy).sqrt();
+                    if dist > 0.0 {
+                        weight * dist.ln_1p() / dist
+                    } else {
+                        0.0
+                    }
+                } else {
+                    weight
+                };
+                local[0] += dx * weight;
+                local[1] += dy * weight;
+            }
+            if params.degree_mass {
+                // Repulsion from the tree already acts per unit of this
+                // node's mass (it sums the OTHER nodes' masses only); the
+                // springs are forces, divided here.
+                force[0] += local[0] / degree;
+                force[1] += local[1] / degree;
+            } else {
+                force = local;
+            }
+            if params.collide_radius > 0.0 {
+                // Not divided by mass: the disc is a geometric floor, not a
+                // physical force, and dividing would leave a hub's disc soft
+                // exactly where its springs pull hardest.
+                let push = self.tree.collision(
+                    index,
+                    &self.pos,
+                    self.csr.degrees(),
+                    params.collide_radius,
+                    params.collide_k,
+                    &mut collide_stack,
+                );
+                force[0] += push[0];
+                force[1] += push[1];
             }
 
             let (target, stiffness) = match &self.anchors {
@@ -1290,6 +1416,153 @@ mod tests {
         assert!(
             escaped < 20_000.0,
             "a node reached {escaped} from the anchor"
+        );
+    }
+
+    #[test]
+    fn candidate_fields_are_off_at_the_default() {
+        // The candidate law rides on new fields. Each one's default must be
+        // the lifted law, or `default()` would stop being the wiki's law
+        // without the pinned five noticing.
+        let params = LayoutParams::default();
+        assert_eq!(params.repulsion_falloff, 2.0);
+        assert!(!params.degree_mass);
+        assert!(params.spring_degree_norm);
+        assert!(!params.spring_log);
+        assert_eq!(params.collide_radius, 0.0);
+    }
+
+    /// Radius from the centroid of every node, and the 90th percentile of the
+    /// linked ones.
+    fn radii(layout: &ForceLayout) -> (Vec<f32>, f32) {
+        let points = layout.positions();
+        let n = points.len() as f32;
+        let cx = points.iter().map(|p| p[0]).sum::<f32>() / n;
+        let cy = points.iter().map(|p| p[1]).sum::<f32>() / n;
+        let radii: Vec<f32> = points
+            .iter()
+            .map(|p| (p[0] - cx).hypot(p[1] - cy))
+            .collect();
+        let mut linked: Vec<f32> = (0..points.len())
+            .filter(|i| layout.degree(*i) > 1.0)
+            .map(|i| radii[i])
+            .collect();
+        linked.sort_by(f32::total_cmp);
+        let p90 = linked[linked.len() * 9 / 10];
+        (radii, p90)
+    }
+
+    #[test]
+    fn atlas_mixes_unlinked_nodes_into_the_disc() {
+        // The wiki's ring, reduced: 200 linked nodes and 100 unlinked. Under
+        // the lifted law every unlinked node settles on one shell outside the
+        // linked ones; under the candidate, Gauss's law in two dimensions
+        // makes the equilibrium a uniform disc, so most of them sit inside.
+        let edges = (0..200u32)
+            .flat_map(|i| [(i, (i + 1) % 200), (i, (i * 7 + 3) % 200)])
+            .collect::<Vec<_>>();
+        let beyond = |params: LayoutParams| {
+            let mut layout = ForceLayout::new(300, &edges, params);
+            settle(&mut layout, 4_000);
+            let (radii, p90) = radii(&layout);
+            (200..300).filter(|i| radii[*i] > p90).count()
+        };
+        let lifted = beyond(lifted_params());
+        let atlas = beyond(LayoutParams {
+            cool: 1.0,
+            ..LayoutParams::atlas()
+        });
+        assert!(lifted > 90, "the lifted law should ring: {lifted}/100");
+        assert!(atlas < 40, "the candidate still rings: {atlas}/100");
+    }
+
+    #[test]
+    fn weighted_far_field_matches_weighted_all_pairs() {
+        // Barnes-Hut with degree mass and 1/r: at theta = 0 the tree must be
+        // the exact weighted all-pairs sum.
+        let count = 120;
+        let pos: Vec<[f32; 2]> = (0..count)
+            .map(|i| {
+                let angle = i as f32 * 2.399963;
+                let radius = 25.0 * (i as f32).sqrt();
+                [angle.cos() * radius, angle.sin() * radius]
+            })
+            .collect();
+        let weights: Vec<f32> = (0..count).map(|i| 1.0 + (i % 7) as f32).collect();
+        let mut tree = QuadTree::default();
+        tree.build(&pos, Some(&weights));
+        let mut stack = Vec::new();
+        for node in [0usize, 17, 64, 119] {
+            let ours = tree.repulsion(node, &pos, 3.0, 0.0, 1.0, Some(&weights), &mut stack);
+            let mut exact = [0.0f32; 2];
+            for other in 0..count {
+                if other == node {
+                    continue;
+                }
+                let dx = pos[node][0] - pos[other][0];
+                let dy = pos[node][1] - pos[other][1];
+                let dist = (dx * dx + dy * dy).max(1.0).sqrt();
+                let magnitude = 3.0 / dist * weights[other];
+                exact[0] += dx / dist * magnitude;
+                exact[1] += dy / dist * magnitude;
+            }
+            let error = (ours[0] - exact[0]).hypot(ours[1] - exact[1]);
+            assert!(
+                error < 1e-3 * exact[0].hypot(exact[1]).max(1.0),
+                "node {node}: {ours:?} vs {exact:?}"
+            );
+            let approx = tree.repulsion(node, &pos, 3.0, 0.7, 1.0, Some(&weights), &mut stack);
+            let error = (approx[0] - exact[0]).hypot(approx[1] - exact[1]);
+            assert!(
+                error < 0.05 * exact[0].hypot(exact[1]).max(1.0),
+                "node {node} far field off by {error}"
+            );
+        }
+    }
+
+    #[test]
+    fn collision_keeps_a_tight_cluster_apart() {
+        // A complete graph of 30 pulls itself into a knot tighter than its
+        // marks; the collision disc is what holds them a mark apart.
+        let mut edges = Vec::new();
+        for a in 0..30u32 {
+            for b in (a + 1)..30 {
+                edges.push((a, b));
+            }
+        }
+        let closest = |params: LayoutParams| {
+            let mut layout = ForceLayout::new(30, &edges, params);
+            settle(&mut layout, 3_000);
+            let points = layout.positions();
+            let mut closest = f32::INFINITY;
+            for a in 0..30 {
+                for b in (a + 1)..30 {
+                    closest = closest
+                        .min((points[a][0] - points[b][0]).hypot(points[a][1] - points[b][1]));
+                }
+            }
+            closest
+        };
+        // Repulsion all but off and springs firm, so without the disc the
+        // 30 settle a few units apart.
+        let base = LayoutParams {
+            cool: 1.0,
+            repulsion: 0.001,
+            attraction: 0.02,
+            ..LayoutParams::atlas()
+        };
+        let loose = closest(LayoutParams {
+            collide_radius: 0.0,
+            ..base
+        });
+        let held = closest(base);
+        assert!(
+            loose < 2.0 * super::super::marks::MARK,
+            "fixture never overlapped: {loose}"
+        );
+        assert!(
+            held > 1.6 * super::super::marks::MARK,
+            "collision let marks overlap: {held}"
         );
     }
 

@@ -75,6 +75,11 @@ impl Csr {
         self.degree[node]
     }
 
+    /// Every node's `1 + incident edges`, index-parallel to the positions.
+    pub(crate) fn degrees(&self) -> &[f32] {
+        &self.degree
+    }
+
     /// Undirected edge count, recovered from the doubled adjacency.
     pub(crate) fn edge_count(&self) -> usize {
         self.targets.len() / 2
@@ -90,7 +95,10 @@ impl Csr {
 #[derive(Clone, Copy, Debug)]
 struct Cell {
     centre_of_mass: [f32; 2],
-    /// Point count, which is the mass because every node repels equally.
+    /// Geometric centre of the square this cell covers, for range queries.
+    centre: [f32; 2],
+    /// Point count when every node repels equally, or the sum of the members'
+    /// weights when the tree was built with weights.
     mass: f32,
     /// Half the side length of the square this cell covers.
     half: f32,
@@ -123,7 +131,10 @@ pub(crate) struct QuadTree {
 }
 
 impl QuadTree {
-    pub(crate) fn build(&mut self, pos: &[[f32; 2]]) {
+    /// Build over `pos`. With `weights`, a cell's mass is the sum of its
+    /// members' weights and its centre of mass is weighted by them; without,
+    /// every node weighs one, which is the lifted law.
+    pub(crate) fn build(&mut self, pos: &[[f32; 2]], weights: Option<&[f32]>) {
         self.cells.clear();
         self.order.clear();
         if pos.is_empty() {
@@ -157,6 +168,7 @@ impl QuadTree {
         self.scratch.resize(pos.len(), 0);
         self.cells.push(Cell {
             centre_of_mass: [0.0, 0.0],
+            centre,
             mass: 0.0,
             half,
             children: [NO_CHILD; 4],
@@ -164,17 +176,39 @@ impl QuadTree {
             count: pos.len() as u32,
             leaf: true,
         });
-        self.subdivide(0, centre, pos, 0);
+        self.subdivide(0, centre, pos, weights, 0);
     }
 
     /// Split `cell` until it is small enough to be a leaf, accumulating the
     /// centre of mass on the way back up.
-    fn subdivide(&mut self, cell: usize, centre: [f32; 2], pos: &[[f32; 2]], depth: u32) {
+    fn subdivide(
+        &mut self,
+        cell: usize,
+        centre: [f32; 2],
+        pos: &[[f32; 2]],
+        weights: Option<&[f32]>,
+        depth: u32,
+    ) {
         let first = self.cells[cell].first as usize;
         let count = self.cells[cell].count as usize;
         let half = self.cells[cell].half;
 
         if count as u32 <= LEAF_CAPACITY || depth >= MAX_DEPTH {
+            if let Some(weights) = weights {
+                let mut sum = [0.0f32; 2];
+                let mut mass = 0.0f32;
+                for &index in &self.order[first..first + count] {
+                    let weight = weights[index as usize];
+                    sum[0] += pos[index as usize][0] * weight;
+                    sum[1] += pos[index as usize][1] * weight;
+                    mass += weight;
+                }
+                let cell = &mut self.cells[cell];
+                cell.leaf = true;
+                cell.mass = mass;
+                cell.centre_of_mass = [sum[0] / mass, sum[1] / mass];
+                return;
+            }
             let mut sum = [0.0f32; 2];
             for &index in &self.order[first..first + count] {
                 sum[0] += pos[index as usize][0];
@@ -216,8 +250,13 @@ impl QuadTree {
                 continue;
             }
             let child = self.cells.len() as u32;
+            let child_centre = [
+                centre[0] + if quad & 1 == 0 { -quarter } else { quarter },
+                centre[1] + if quad & 2 == 0 { -quarter } else { quarter },
+            ];
             self.cells.push(Cell {
                 centre_of_mass: [0.0, 0.0],
+                centre: child_centre,
                 mass: 0.0,
                 half: quarter,
                 children: [NO_CHILD; 4],
@@ -226,11 +265,7 @@ impl QuadTree {
                 leaf: true,
             });
             self.cells[cell].children[quad] = child;
-            let child_centre = [
-                centre[0] + if quad & 1 == 0 { -quarter } else { quarter },
-                centre[1] + if quad & 2 == 0 { -quarter } else { quarter },
-            ];
-            self.subdivide(child as usize, child_centre, pos, depth + 1);
+            self.subdivide(child as usize, child_centre, pos, weights, depth + 1);
             let child = &self.cells[child as usize];
             mass += child.mass;
             weighted[0] += child.centre_of_mass[0] * child.mass;
@@ -250,12 +285,22 @@ impl QuadTree {
     /// `theta = 0` the test can never pass, every leaf is visited, and the
     /// result is the exact all-pairs sum the lifted kernel computed — which is
     /// how the migration is proved rather than assumed.
+    ///
+    /// `falloff` is the exponent `p` in `repulsion / r^p`: `2` is the lifted
+    /// law, `1` is the ForceAtlas2 law, whose field inside a uniform disc grows
+    /// linearly with radius (Gauss's law in two dimensions) and so balances a
+    /// linear anchor everywhere at once. `weights`, when given, must be the
+    /// ones the tree was built with; each other node then repels in proportion
+    /// to its weight.
+    #[allow(clippy::too_many_arguments)]
     pub(crate) fn repulsion(
         &self,
         node: usize,
         pos: &[[f32; 2]],
         repulsion: f32,
         theta: f32,
+        falloff: f32,
+        weights: Option<&[f32]>,
         stack: &mut Vec<u32>,
     ) -> [f32; 2] {
         let mut force = [0.0f32; 2];
@@ -283,7 +328,7 @@ impl QuadTree {
                     // qualifies when it is far, where the floor never binds.
                     let clamped = dist_sq.max(1.0);
                     let dist = clamped.sqrt().max(0.001);
-                    let magnitude = repulsion / clamped * cell.mass;
+                    let magnitude = law(repulsion, clamped, dist, falloff) * cell.mass;
                     force[0] += dx / dist * magnitude;
                     force[1] += dy / dist * magnitude;
                     continue;
@@ -322,12 +367,107 @@ impl QuadTree {
                 }
                 let dist_sq = (dx * dx + dy * dy).max(1.0);
                 let dist = dist_sq.sqrt().max(0.001);
-                let magnitude = repulsion / dist_sq;
+                let mut magnitude = law(repulsion, dist_sq, dist, falloff);
+                if let Some(weights) = weights {
+                    magnitude *= weights[other];
+                }
                 force[0] += dx / dist * magnitude;
                 force[1] += dy / dist * magnitude;
             }
         }
         force
+    }
+
+    /// Push `node` out of every other node's disc.
+    ///
+    /// Node `j`'s disc has radius `radius * drawn_scale(degrees[j])`, the same
+    /// degree scaling the wiki draws its marks with, so a hub keeps the room
+    /// its larger mark takes. The push is a linear spring on the overlap,
+    /// `stiffness * (r_i + r_j - d)`, equal and opposite for the pair, so it
+    /// conserves momentum the way the repulsion does. Exact: every cell that
+    /// can hold an overlapping disc is opened, nothing is summarised.
+    pub(crate) fn collision(
+        &self,
+        node: usize,
+        pos: &[[f32; 2]],
+        degrees: &[f32],
+        radius: f32,
+        stiffness: f32,
+        stack: &mut Vec<u32>,
+    ) -> [f32; 2] {
+        let mut force = [0.0f32; 2];
+        if self.cells.is_empty() || radius <= 0.0 {
+            return force;
+        }
+        let point = pos[node];
+        let own = radius * drawn_scale(degrees[node]);
+        let reach = own + radius * DRAWN_SCALE_MAX;
+
+        stack.clear();
+        stack.push(0);
+        while let Some(index) = stack.pop() {
+            let cell = &self.cells[index as usize];
+            if cell.mass == 0.0 {
+                continue;
+            }
+            let span = cell.half + reach;
+            if (point[0] - cell.centre[0]).abs() > span || (point[1] - cell.centre[1]).abs() > span
+            {
+                continue;
+            }
+            if !cell.leaf {
+                stack.extend(cell.children.iter().copied().filter(|c| *c != NO_CHILD));
+                continue;
+            }
+            let first = cell.first as usize;
+            for &other in &self.order[first..first + cell.count as usize] {
+                let other = other as usize;
+                if other == node {
+                    continue;
+                }
+                let limit = own + radius * drawn_scale(degrees[other]);
+                let mut dx = point[0] - pos[other][0];
+                let mut dy = point[1] - pos[other][1];
+                let dist_sq = dx * dx + dy * dy;
+                if dist_sq >= limit * limit {
+                    continue;
+                }
+                let mut dist = dist_sq.sqrt();
+                if dist == 0.0 {
+                    let (low, high) = (node.min(other), node.max(other));
+                    let angle = pair_angle(low as u64, high as u64);
+                    let sign = if node == low { -1.0 } else { 1.0 };
+                    dx = angle.cos() * sign;
+                    dy = angle.sin() * sign;
+                    dist = 1.0;
+                }
+                let push = stiffness * (limit - dist_sq.sqrt());
+                force[0] += dx / dist * push;
+                force[1] += dy / dist * push;
+            }
+        }
+        force
+    }
+}
+
+/// The largest [`drawn_scale`] ever returns.
+pub(crate) const DRAWN_SCALE_MAX: f32 = 3.0;
+
+/// How much larger than a bare mark the wiki draws a node of `degree`
+/// (`1 + incident edges`): logarithmic in degree, capped at three.
+pub(crate) fn drawn_scale(degree: f32) -> f32 {
+    (1.0 + degree.ln() * 0.4).min(DRAWN_SCALE_MAX)
+}
+
+/// `repulsion / r^falloff`, with the lifted law's exact arithmetic at `2`.
+#[inline]
+fn law(repulsion: f32, dist_sq: f32, dist: f32, falloff: f32) -> f32 {
+    if falloff == 2.0 {
+        repulsion / dist_sq
+    } else if falloff == 1.0 {
+        repulsion / dist
+    } else {
+        repulsion / dist.powf(falloff)
     }
 }
 
@@ -378,9 +518,9 @@ mod tests {
         // depth cap is what makes this a leaf bucket rather than a hang.
         let pos = vec![[3.0f32, -2.0]; 64];
         let mut tree = QuadTree::default();
-        tree.build(&pos);
+        tree.build(&pos, None);
         let mut stack = Vec::new();
-        let force = tree.repulsion(0, &pos, 140_000.0, 0.7, &mut stack);
+        let force = tree.repulsion(0, &pos, 140_000.0, 0.7, 2.0, None, &mut stack);
         assert!(force[0].is_finite() && force[1].is_finite());
     }
 }
