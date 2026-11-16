@@ -94,9 +94,11 @@ impl GraphViewport {
     /// Apply this frame's pointer input.
     pub fn interact(&mut self, ui: &Ui, response: &Response, rect: Rect) {
         let centre = rect.center();
-        let pointer_inside = ui
-            .input(|i| i.pointer.hover_pos())
-            .is_some_and(|at| rect.contains(at));
+        // Raw zoom input must respect covering areas, including non-dragging floats.
+        let pointer_inside = ui.ctx().rect_contains_pointer(
+            response.layer_id,
+            rect.intersect(ui.clip_rect()),
+        );
         if pointer_inside {
             // Pinch-to-zoom, or command/ctrl with the wheel. Plain scroll is
             // deliberately *not* consumed: it belongs to whatever the graph is
