@@ -159,7 +159,6 @@ pub fn show_floating_card(
         .order(area_order)
         .fixed_pos(screen_pos)
         .movable(false)
-        .interactable(false)
         .constrain_to(egui::Rect::EVERYTHING);
 
     let mut handle_clicked = false;

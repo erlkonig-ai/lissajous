@@ -269,7 +269,12 @@ struct NotebookCore {
     settled: Arc<AtomicBool>,
 }
 
-struct Notebook {
+/// The notebook renderer, embeddable in a host-owned egui window.
+///
+/// Construct with [`NotebookConfig::embedded`]. The host owns the event loop,
+/// input, repaint scheduling, GPU painter and lifetime; dropping a notebook
+/// never exits that loop or installs process-wide handlers.
+pub struct Notebook {
     core: NotebookCore,
     #[cfg(not(target_arch = "wasm32"))]
     icons: Option<AppIcons>,
@@ -377,6 +382,13 @@ impl NotebookConfig {
         self
     }
 
+    /// Disable source-editor launch actions, including an ambient editor command.
+    #[cfg(not(target_arch = "wasm32"))]
+    pub fn without_editor(mut self) -> Self {
+        self.editor = None;
+        self
+    }
+
     /// Enables headless capture mode, rendering each card to a PNG in `output_dir`.
     #[cfg(not(target_arch = "wasm32"))]
     pub fn with_headless_capture(mut self, output_dir: impl Into<PathBuf>) -> Self {
@@ -470,6 +482,30 @@ impl NotebookConfig {
 
     fn state_id(&self) -> egui::Id {
         egui::Id::new(("gorbie_notebook_state", self.title.as_str()))
+    }
+
+    /// Construct a renderer without opening a window or acquiring a backend.
+    ///
+    /// Use a dedicated egui context for this window. This installs the same
+    /// fonts and themes as the standalone notebook, but no signal handler or
+    /// ambient telemetry owner. Call [`Notebook::show`] once per paint frame.
+    pub fn embedded(
+        self,
+        ctx: &egui::Context,
+        body: impl FnMut(&mut NotebookCtx) + 'static,
+    ) -> Notebook {
+        ctx.set_fonts(industrial_fonts());
+        ctx.set_style_of(egui::Theme::Light, industrial_light());
+        ctx.set_style_of(egui::Theme::Dark, industrial_dark());
+        Notebook {
+            core: NotebookCore::new(self, Box::new(body)),
+            #[cfg(not(target_arch = "wasm32"))]
+            icons: None,
+            #[cfg(not(target_arch = "wasm32"))]
+            icon_is_dark: None,
+            #[cfg(feature = "telemetry")]
+            telemetry: None,
+        }
     }
 
     /// Launches the notebook application.
@@ -818,13 +854,25 @@ impl Notebook {
 
 impl eframe::App for Notebook {
     fn ui(&mut self, ui: &mut egui::Ui, frame: &mut eframe::Frame) {
+        self.show(ui, frame.wgpu_render_state().map(|state| state.target_format));
+    }
+}
+
+impl Notebook {
+    /// Paint the existing notebook into a host-provided root UI.
+    ///
+    /// `target_format` must match the host's egui GPU pass for custom paint
+    /// callbacks. The host handles platform output and schedules egui repaint
+    /// requests, including those issued by background cell work.
+    pub fn show(&mut self, ui: &mut egui::Ui, target_format: Option<egui_wgpu::wgpu::TextureFormat>) {
         let ctx = ui.ctx().clone();
         // Publish the wgpu colour-target format so custom 3D cards can
         // build pipelines that match egui's pass (see
         // `wgpu_target_format`). Present only on the wgpu backend.
-        if let Some(rs) = frame.wgpu_render_state() {
-            let fmt = rs.target_format;
+        if let Some(fmt) = target_format {
             ctx.data_mut(|d| d.insert_temp(wgpu_target_format_id(), fmt));
+        } else {
+            ctx.data_mut(|d| d.remove::<egui_wgpu::wgpu::TextureFormat>(wgpu_target_format_id()));
         }
         #[cfg(not(target_arch = "wasm32"))]
         self.update_app_icon(&ctx);
@@ -1487,6 +1535,30 @@ mod notebook_state_tests {
     use std::cell::Cell;
 
     use super::*;
+
+    #[test]
+    #[cfg(not(target_arch = "wasm32"))]
+    fn embedded_renderer_keeps_cell_state_without_owning_a_window() {
+        let context = egui::Context::default();
+        let initialized = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+        let count = initialized.clone();
+        let mut notebook = NotebookConfig::new("embedded fixture").without_editor()
+            .embedded(&context, move |nb| {
+                nb.state("fixture", || {
+                    count.fetch_add(1, Ordering::Relaxed);
+                    0_usize
+                }, |ctx, value| { *value += 1; ctx.label(value.to_string()); });
+            });
+        for format in [Some(egui_wgpu::wgpu::TextureFormat::Rgba8Unorm), None] {
+            let output = context.run_ui(egui::RawInput::default(), |ui| notebook.show(ui, format));
+            assert_eq!(wgpu_target_format(&context), format);
+            assert!(!output.viewport_output.values().any(|viewport| viewport.commands.iter()
+                .any(|command| matches!(command, egui::ViewportCommand::Close))));
+        }
+        assert_eq!(initialized.load(Ordering::Relaxed), 1);
+        drop(notebook);
+        let _ = context.run_ui(egui::RawInput::default(), |ui| { ui.label("host still alive"); });
+    }
 
     #[test]
     fn state_initializes_once_across_notebook_rebuilds() {

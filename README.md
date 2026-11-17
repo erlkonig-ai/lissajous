@@ -336,6 +336,19 @@ native mapped-file contract and are not repaired by reopening. Drop signals
 shutdown without waiting on a native file lock; published snapshots keep their
 own backing alive.
 
+## Embedding in an existing application
+
+`NotebookConfig::embedded(&egui_context, body)` constructs the same notebook
+renderer without opening a window, starting an event loop, installing a signal
+handler, or acquiring ambient telemetry. Give it a dedicated egui context, then
+call `notebook.show(ui, target_format)` from the host's root UI paint pass. The
+target format must match the host's wgpu painter when cards use GPU callbacks.
+The host routes input, handles platform output, schedules egui repaint requests,
+and owns window/worker teardown. Dropping the notebook never exits the host.
+Use `without_editor()` to disable source-editor actions in an embedded product.
+Cell state and composition work exactly as in `run`; the standalone, headless,
+and web runners retain their existing behavior.
+
 ## Script Workflow (Quick/Share)
 If you want a single-file notebook or quick distribution, use
 [`watchexec`](https://github.com/watchexec/watchexec) and
