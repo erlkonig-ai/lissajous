@@ -96,6 +96,40 @@ fn unsettled_report(timed_out: &[usize], total: usize, settle_timeout: Duration)
     ))
 }
 
+/// Layout passes a card gets to reach a height that agrees with the screen it
+/// was laid out in. Ordinary cards need one or two; a card that keeps changing
+/// height beyond this is reported rather than emitted half-drawn.
+const MAX_LAYOUT_PASSES: usize = 8;
+
+fn unconverged_report(unconverged: &[usize], total: usize) -> Option<String> {
+    if unconverged.is_empty() {
+        return None;
+    }
+    let shown: Vec<String> = unconverged.iter().take(8).map(|i| i.to_string()).collect();
+    let ellipsis = if unconverged.len() > shown.len() {
+        format!(", and {} more", unconverged.len() - shown.len())
+    } else {
+        String::new()
+    };
+    Some(format!(
+        "GORBIE headless: {} of {} card(s) NEVER REACHED A STABLE HEIGHT in {} layout \
+         passes, so no image was written for them (an image would have had undrawn \
+         rows). Cards: {}{}. Their height changes from frame to frame; give them a \
+         height that does not depend on the previous frame or on the screen height.",
+        unconverged.len(),
+        total,
+        MAX_LAYOUT_PASSES,
+        shown.join(", "),
+        ellipsis,
+    ))
+}
+
+fn report_unconverged(unconverged: &[usize], total: usize) {
+    if let Some(report) = unconverged_report(unconverged, total) {
+        eprintln!("{report}");
+    }
+}
+
 fn report_unsettled(timed_out: &[usize], total: usize, settle_timeout: Duration) {
     if let Some(report) = unsettled_report(timed_out, total, settle_timeout) {
         eprintln!("{report}");
@@ -212,39 +246,65 @@ impl HeadlessWgpuRunner {
     ) -> HeadlessResult<()> {
         let mut index = 0;
         let mut timed_out: Vec<usize> = Vec::new();
-        loop {
-            let (mut output, measured_height, outcome) =
-                self.run_frame_until_settled(core, index, NOTEBOOK_MIN_HEIGHT)?;
-            let mut moving = outcome == Settle::MovingAtDeadline;
-            let Some(measured_height) = measured_height else {
-                break;
-            };
-
+        let mut unconverged: Vec<usize> = Vec::new();
+        'cards: loop {
+            // Lay the card out, measure it, and lay it out again at the measured
+            // height until the two agree. The image is rendered at the height the
+            // frame was laid out at, because egui clips everything to that screen
+            // rect: rendering at a later, larger measurement leaves the rows below
+            // the screen cleared and never drawn. A card whose height still changes
+            // after MAX_LAYOUT_PASSES is reported instead of emitted half-drawn.
             let mut textures_delta = egui::TexturesDelta::default();
-            textures_delta.append(std::mem::take(&mut output.textures_delta));
-            let desired_height = measured_height.max(1.0);
-            let (mut output, final_height) = if height_close(NOTEBOOK_MIN_HEIGHT, desired_height) {
-                (output, desired_height)
-            } else {
+            let mut moving = false;
+            let mut layout_height = NOTEBOOK_MIN_HEIGHT;
+            let mut passes = 0;
+            let output = loop {
                 let (mut output, measured_height, outcome) =
-                    self.run_frame_until_settled(core, index, desired_height)?;
+                    self.run_frame_until_settled(core, index, layout_height)?;
+                passes += 1;
                 moving = moving || outcome == Settle::MovingAtDeadline;
                 let Some(measured_height) = measured_height else {
-                    break;
+                    break 'cards;
                 };
                 textures_delta.append(std::mem::take(&mut output.textures_delta));
-                (output, measured_height.max(1.0))
+                let measured_height = measured_height.max(1.0);
+                if height_close(layout_height, measured_height) {
+                    break Some(output);
+                }
+                if passes >= MAX_LAYOUT_PASSES {
+                    break None;
+                }
+                layout_height = measured_height;
             };
 
-            output.textures_delta = textures_delta;
-            if moving {
-                timed_out.push(index);
+            match output {
+                Some(mut output) => {
+                    output.textures_delta = textures_delta;
+                    if moving {
+                        timed_out.push(index);
+                    }
+                    let tiles =
+                        self.render_output(output, egui::vec2(self.card_width, layout_height))?;
+                    emit_images(index, tiles, emit)?;
+                }
+                None => {
+                    // Nothing is drawn with these deltas, but the textures they
+                    // allocate must still reach the renderer so later cards that
+                    // reuse them (fonts, images) find them.
+                    for (id, delta) in &textures_delta.set {
+                        self.renderer
+                            .update_texture(&self.device, &self.queue, *id, delta);
+                    }
+                    for id in &textures_delta.free {
+                        self.renderer.free_texture(id);
+                    }
+                    unconverged.push(index);
+                }
             }
-            let tiles = self.render_output(output, egui::vec2(self.card_width, final_height))?;
-            emit_images(index, tiles, emit)?;
             index += 1;
         }
         report_unsettled(&timed_out, index, self.settle_timeout);
+        report_unconverged(&unconverged, index);
         Ok(())
     }
 
@@ -736,6 +796,15 @@ mod tests {
     /// how many it is hiding -- an instrument that truncates silently is the
     /// thing this whole change exists to stop.
     #[test]
+    fn an_unconverged_card_is_named_and_a_converged_capture_says_nothing() {
+        assert!(unconverged_report(&[], 12).is_none());
+        let report = unconverged_report(&[3], 12).unwrap();
+        assert!(report.contains("1 of 12"), "{report}");
+        assert!(report.contains("NEVER REACHED A STABLE HEIGHT"), "{report}");
+        assert!(report.contains("Cards: 3."), "{report}");
+    }
+
+    #[test]
     fn a_long_timeout_list_truncates_but_states_how_many_it_dropped() {
         let all: Vec<usize> = (0..3375).collect();
         let report = unsettled_report(&all, 3375, Duration::from_millis(45_000)).unwrap();
@@ -744,6 +813,82 @@ mod tests {
         assert!(report.contains("0, 1, 2, 3, 4, 5, 6, 7"), "{report}");
         assert!(report.contains("and 3367 more"), "{report}");
         assert_eq!(report.lines().count(), 1, "{report}");
+    }
+
+    fn have_adapter() -> bool {
+        let instance = wgpu::Instance::default();
+        pollster::block_on(instance.request_adapter(&wgpu::RequestAdapterOptions::default()))
+            .is_ok()
+    }
+
+    /// A card that is taller on its second frame than on its first. The old
+    /// capture laid the second pass out at the FIRST measurement and rendered it
+    /// at the SECOND, so egui clipped to the smaller screen and the rows below
+    /// were cleared and never drawn (seen on the TribleSpace dashboard,
+    /// 2026-11-18). Every row of the image must show the card's paint.
+    #[test]
+    fn a_card_that_grows_between_frames_is_captured_without_undrawn_rows() {
+        if !have_adapter() {
+            eprintln!("SKIPPED: no wgpu adapter on this machine");
+            return;
+        }
+        use std::sync::atomic::{AtomicUsize, Ordering};
+        use std::sync::Arc;
+        const PAINT: egui::Color32 = egui::Color32::from_rgb(255, 0, 255);
+        let draws = Arc::new(AtomicUsize::new(0));
+        let body_draws = draws.clone();
+        let mut captures = Vec::new();
+        crate::NotebookConfig::new("growing card")
+            .with_headless_theme(crate::HeadlessTheme::Dark)
+            .capture(
+                crate::CaptureOptions {
+                    pixels_per_point: 1.0,
+                    settle_timeout: Duration::from_secs(2),
+                },
+                move |nb| {
+                    let draws = body_draws.clone();
+                    nb.view(move |ctx| {
+                        let height = if draws.fetch_add(1, Ordering::Relaxed) == 0 {
+                            500.0
+                        } else {
+                            1100.0
+                        };
+                        let width = ctx.available_width();
+                        let (rect, _) = ctx
+                            .allocate_exact_size(egui::vec2(width, height), egui::Sense::hover());
+                        ctx.painter().rect_filled(rect, 0.0, PAINT);
+                    });
+                    nb.settled();
+                },
+                |capture| {
+                    captures.push(capture);
+                    Ok(())
+                },
+            )
+            .unwrap();
+        assert_eq!(captures.len(), 1, "one card, one tile");
+        let capture = &captures[0];
+        assert_eq!(capture.height, 1100, "rendered at the card's final height");
+        let mut reader = png::Decoder::new(std::io::Cursor::new(&capture.bytes))
+            .read_info()
+            .unwrap();
+        let mut buffer = vec![0; reader.output_buffer_size().unwrap()];
+        let info = reader.next_frame(&mut buffer).unwrap();
+        let row_bytes = info.width as usize * 4;
+        let undrawn: Vec<usize> = (0..info.height as usize)
+            .filter(|y| {
+                !buffer[y * row_bytes..(y + 1) * row_bytes]
+                    .chunks_exact(4)
+                    .any(|px| px[0] > 200 && px[1] < 60 && px[2] > 200)
+            })
+            .collect();
+        assert!(
+            undrawn.is_empty(),
+            "{} of {} rows carry none of the card's paint, first at y={}",
+            undrawn.len(),
+            info.height,
+            undrawn[0],
+        );
     }
 
     #[test]
