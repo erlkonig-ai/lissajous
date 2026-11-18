@@ -141,6 +141,34 @@ pub struct LatticeEdge {
     pub endorsed: bool,
 }
 
+/// One element of an attached collection, drawn in depth over the node it
+/// indexes.
+///
+/// An attached collection is not a second lattice beside its parent: its
+/// mapping takes nodes of the parent's lattice to attachments, one `MAP`
+/// record each. So it is drawn as a layer standing over the parent, each
+/// attachment directly above the node it indexes and offset along a depth
+/// axis, rather than as more nodes in the plane competing with the order for
+/// position. The layout never sees an overlay: rank and lane belong to the
+/// lattice, and an attachment's place is a function of its anchor's.
+///
+/// Only an attachment some record put here is ever drawn. A parent node with
+/// no `MAP` simply has nothing above it; inventing a hole for every node an
+/// attached collection *could* index would draw work nobody declared.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct LatticeOverlay {
+    /// Index of the node in the lattice this attachment indexes.
+    pub anchor: usize,
+    /// Layer, from `1`: an attachment of the drawn lattice is depth one, an
+    /// attachment of that attached collection is depth two, and so on. Depth
+    /// zero is the lattice itself and draws nothing.
+    pub depth: u8,
+    /// The attachment's bytes are here, or it is a hole.
+    pub presence: LatticePresence,
+    /// Restated in hue exactly as a node's is.
+    pub admission: LatticeAdmission,
+}
+
 /// What the pointer did to the lattice this frame.
 pub struct LatticeResponse {
     /// The allocated region's own response.
@@ -156,6 +184,9 @@ pub struct LatticeResponse {
     pub drawn: usize,
     /// Nodes collapsed to a dot because the zoom made their mark unreadable.
     pub folded: usize,
+    /// Overlay marks drawn this frame. An overlay whose anchor is out of range
+    /// or off screen is not counted, so a caller can say what it skipped.
+    pub overlaid: usize,
 }
 
 /// A collection lattice, drawn as a settling layout with ranked lanes.
@@ -234,6 +265,7 @@ pub struct LatticeResponse {
 pub struct LatticeGraph<'a> {
     nodes: &'a [LatticeNode],
     edges: &'a [LatticeEdge],
+    overlays: &'a [LatticeOverlay],
     selected: Option<usize>,
     height: Option<f32>,
     salt: &'static str,
@@ -249,6 +281,7 @@ impl<'a> LatticeGraph<'a> {
         Self {
             nodes,
             edges,
+            overlays: &[],
             selected: None,
             height: None,
             salt: "gorbie_lattice",
@@ -259,6 +292,14 @@ impl<'a> LatticeGraph<'a> {
     /// nothing, which keeps a stale selection from blanking the view.
     pub fn selected(mut self, selected: Option<usize>) -> Self {
         self.selected = selected;
+        self
+    }
+
+    /// Draw attachments in depth over the nodes they index. See
+    /// [`LatticeOverlay`]. Overlays never enter the layout, so adding or
+    /// hiding a layer does not move a single node of the lattice.
+    pub fn overlays(mut self, overlays: &'a [LatticeOverlay]) -> Self {
+        self.overlays = overlays;
         self
     }
 
@@ -321,6 +362,7 @@ impl<'a> LatticeGraph<'a> {
                 clicked: None,
                 drawn: 0,
                 folded: 0,
+                overlaid: 0,
             };
         }
         let generation = shared.generation();
@@ -502,6 +544,50 @@ impl<'a> LatticeGraph<'a> {
             );
         }
 
+        // Overlays last, so a layer stands over the lattice rather than under
+        // it. Each sits up and to the right of its anchor, one step per depth,
+        // joined to the layer below by a short stem: the stem is the MAP
+        // record itself, so it is always solid -- an attachment with no record
+        // is not drawn at all.
+        let mut overlaid = 0usize;
+        for overlay in self.overlays {
+            let Some(&at) = screen.get(overlay.anchor) else {
+                continue;
+            };
+            if overlay.depth == 0 || !visible.contains(at) {
+                continue;
+            }
+            let exception = matches!(overlay.presence, LatticePresence::Absent)
+                || matches!(overlay.admission, LatticeAdmission::Unadmitted);
+            if matches!(lod, Lod::Dots | Lod::Aggregate) && !exception {
+                continue;
+            }
+            let lit_here = lit[overlay.anchor];
+            // Deeper layers recede into the page ground, so a stack of three
+            // reads as a stack and not as three equal marks fighting.
+            let recede = (0.22 * overlay.depth as f32).min(0.6);
+            let base = if lit_here {
+                mark_colour(overlay.admission, ink)
+            } else {
+                dim
+            };
+            let colour = themes::blend(base, visuals.window_fill, recede);
+            let below = at + depth_offset(overlay.depth - 1, scale);
+            let above = at + depth_offset(overlay.depth, scale);
+            painter.line_segment(
+                [below, above],
+                eframe::egui::Stroke::new(1.0_f32, if lit_here { hairline } else { dim }),
+            );
+            let mark = LatticeNode {
+                mark: LatticeMark::Computed,
+                presence: overlay.presence,
+                admission: overlay.admission,
+                ..LatticeNode::default()
+            };
+            draw_mark(&painter, above, scale * OVERLAY_SCALE, &mark, colour);
+            overlaid += 1;
+        }
+
         let near = |at: Pos2| graph::pick(&screen, at, graph::HIT * scale.max(0.4));
         let hovered = response.hover_pos().and_then(near);
         let clicked = response
@@ -515,6 +601,7 @@ impl<'a> LatticeGraph<'a> {
             clicked,
             drawn,
             folded,
+            overlaid,
         }
     }
 }
@@ -554,6 +641,18 @@ const LABEL_BUDGET: usize = 512;
 /// Rows a column may claim before the view stops growing and starts scrolling
 /// its own viewport instead.
 const MAX_ROWS: f32 = 18.0;
+
+/// Mark size of an overlay against a lattice node: smaller, because an
+/// attachment is a fact about its anchor rather than an element of the order.
+const OVERLAY_SCALE: f32 = 0.7;
+/// Screen offset of one depth step, before zoom. Up and to the right, an
+/// oblique projection of a z axis out of the page; steep enough that a stem
+/// never lands on a label, which sits below its mark.
+const DEPTH_STEP: [f32; 2] = [8.0, -13.0];
+
+fn depth_offset(depth: u8, scale: f32) -> eframe::egui::Vec2 {
+    vec2(DEPTH_STEP[0], DEPTH_STEP[1]) * depth as f32 * scale.max(0.4)
+}
 
 fn rank_x(rank: usize) -> f32 {
     rank as f32 * RANK_PITCH
@@ -1354,6 +1453,78 @@ mod tests {
         assert!(
             !text_colours.contains(&themes::admitted_mark()),
             "a label was drawn in the admission hue: {text_colours:?}"
+        );
+    }
+
+    #[test]
+    fn overlays_draw_only_what_was_handed_and_never_move_the_lattice() {
+        // Two nodes, three overlays: one real attachment, one at depth zero
+        // (the lattice itself, which draws nothing), and one anchored past the
+        // end (an attachment of a node this caller did not include). Only the
+        // first may be drawn, and the lattice must draw the same marks with
+        // and without it -- a layer is never a node of the order.
+        let nodes = vec![
+            LatticeNode {
+                label: "low".into(),
+                ..LatticeNode::default()
+            },
+            LatticeNode {
+                label: "high".into(),
+                ..LatticeNode::default()
+            },
+        ];
+        let edges = [LatticeEdge {
+            from: 0,
+            to: 1,
+            endorsed: true,
+        }];
+        let overlays = [
+            LatticeOverlay {
+                anchor: 1,
+                depth: 1,
+                presence: LatticePresence::Absent,
+                admission: LatticeAdmission::Unknown,
+            },
+            LatticeOverlay {
+                anchor: 0,
+                depth: 0,
+                presence: LatticePresence::Present,
+                admission: LatticeAdmission::Unknown,
+            },
+            LatticeOverlay {
+                anchor: 7,
+                depth: 1,
+                presence: LatticePresence::Present,
+                admission: LatticeAdmission::Unknown,
+            },
+        ];
+        let run = |overlays: &[LatticeOverlay]| {
+            let ctx = eframe::egui::Context::default();
+            let mut last = (0, 0, 0);
+            for _ in 0..2 {
+                ctx.run(Default::default(), |ctx| {
+                    eframe::egui::CentralPanel::default().show(ctx, |ui| {
+                        let drawn = LatticeGraph::new(&nodes, &edges)
+                            .overlays(overlays)
+                            .height(400.0)
+                            .show(ui);
+                        last = (drawn.drawn, drawn.folded, drawn.overlaid);
+                    });
+                });
+            }
+            last
+        };
+        let (drawn, folded, overlaid) = run(&overlays);
+        assert_eq!(
+            overlaid, 1,
+            "only the in-range, nonzero-depth overlay draws"
+        );
+        let (bare_drawn, bare_folded, bare_overlaid) = run(&[]);
+        assert_eq!(bare_overlaid, 0);
+        assert_eq!(
+            (drawn, folded),
+            (bare_drawn, bare_folded),
+            "an overlay changed which lattice marks were drawn"
         );
     }
 

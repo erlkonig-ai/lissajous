@@ -70,8 +70,8 @@ pub use histogram::HistogramBucket;
 pub use histogram::HistogramYAxis;
 pub use label::row_label;
 pub use lattice::{
-    LatticeAdmission, LatticeEdge, LatticeGraph, LatticeMark, LatticeNode, LatticePresence,
-    LatticeResponse,
+    LatticeAdmission, LatticeEdge, LatticeGraph, LatticeMark, LatticeNode, LatticeOverlay,
+    LatticePresence, LatticeResponse,
 };
 pub use load::load_auto;
 pub use load::load_button;
