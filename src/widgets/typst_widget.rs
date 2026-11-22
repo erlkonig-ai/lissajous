@@ -7,7 +7,7 @@ use eframe::egui;
 use typst::syntax::Span;
 
 use super::typst_render::painter;
-use super::typst_render::world::GorbieWorld;
+use super::typst_render::world::{FileResolver, GorbieWorld, UNAVAILABLE_IMAGE};
 use crate::themes::colorhash::RAL_CATEGORICAL;
 use crate::themes::ral::RAL_COLORS;
 
@@ -38,7 +38,7 @@ thread_local! {
 pub fn typst(ui: &mut egui::Ui, source: &str) {
     TYPST_STATE.with(|state| {
         let mut state = state.borrow_mut();
-        render_typst(ui, &mut state, source, 0);
+        render_typst(ui, &mut state, source, 0, None);
     });
 }
 
@@ -57,7 +57,7 @@ pub fn typst_math_inline(ui: &mut egui::Ui, expr: &str) {
     let source = format!("{preamble}${expr}$");
     TYPST_STATE.with(|state| {
         let mut state = state.borrow_mut();
-        render_typst(ui, &mut state, &source, preamble.len());
+        render_typst(ui, &mut state, &source, preamble.len(), None);
     });
 }
 
@@ -77,7 +77,7 @@ pub fn typst_math_display(ui: &mut egui::Ui, expr: &str) {
     let source = format!("{preamble}$ {expr} $");
     TYPST_STATE.with(|state| {
         let mut state = state.borrow_mut();
-        render_typst(ui, &mut state, &source, preamble.len());
+        render_typst(ui, &mut state, &source, preamble.len(), None);
     });
 }
 
@@ -102,6 +102,16 @@ pub fn typst_math_fn() -> impl Fn(&mut egui::Ui, &str, bool) {
 /// The Typst page margin replaces the grid edge padding so the interactive
 /// area extends to the card edges (better for drag-selection).
 pub fn typst_with_preamble(ui: &mut egui::Ui, content: &str) {
+    typst_with_preamble_inner(ui, content, None);
+}
+
+/// [`typst_with_preamble`], with `files` answering the files the content
+/// names (`image("files:…")` and the like). See [`FileResolver`].
+pub fn typst_with_preamble_and_files(ui: &mut egui::Ui, content: &str, files: &FileResolver<'_>) {
+    typst_with_preamble_inner(ui, content, Some(files));
+}
+
+fn typst_with_preamble_inner(ui: &mut egui::Ui, content: &str, files: Option<&FileResolver<'_>>) {
     let width = ui.available_width();
     let pad = crate::card_ctx::GRID_EDGE_PAD;
     let body_size = ui
@@ -127,7 +137,7 @@ pub fn typst_with_preamble(ui: &mut egui::Ui, content: &str) {
     let source = format!("{preamble}{content}");
     TYPST_STATE.with(|state| {
         let mut state = state.borrow_mut();
-        render_typst(ui, &mut state, &source, preamble.len());
+        render_typst(ui, &mut state, &source, preamble.len(), files);
     });
 }
 
@@ -676,12 +686,144 @@ fn render_typst_errors_inner(
     ui.spacing_mut().item_spacing.y = prev_spacing;
 }
 
+// ── Images ────────────────────────────────────────────────────────────
+
+/// Longest texture side for one document image. A larger picture is
+/// downscaled once on upload; wiki pages show photos far below this size.
+const MAX_IMAGE_TEXTURE_SIDE: usize = 2048;
+
+/// Render passes an unused image texture is kept before it is freed.
+const IMAGE_TEXTURE_IDLE_PASSES: u64 = 600;
+
+/// GPU textures for document images, keyed by Typst's image hash (which
+/// covers the bytes and decode options), with the pass that last used them.
+#[derive(Clone, Default)]
+struct ImageTextures(
+    std::sync::Arc<std::sync::Mutex<std::collections::HashMap<u128, (egui::TextureHandle, u64)>>>,
+);
+
+/// The texture for a raster image, or `None` for anything that is not
+/// painted as pixels (the unavailable placeholder, SVG, PDF).
+fn image_texture(
+    ctx: &egui::Context,
+    image: &typst::visualize::Image,
+) -> Option<egui::TextureHandle> {
+    use typst::visualize::{ImageKind, ImageScaling};
+
+    let ImageKind::Raster(raster) = image.kind() else {
+        return None;
+    };
+    if raster.data().as_slice() == UNAVAILABLE_IMAGE {
+        return None;
+    }
+    let key = typst::utils::hash128(image);
+    let pass = ctx.cumulative_pass_nr();
+    let textures = ctx.data_mut(|data| {
+        data.get_temp_mut_or_default::<ImageTextures>(egui::Id::new("gorbie_typst_image_textures"))
+            .clone()
+    });
+    let mut textures = textures
+        .0
+        .lock()
+        .unwrap_or_else(|poison| poison.into_inner());
+    if let Some((texture, used)) = textures.get_mut(&key) {
+        *used = pass;
+        return Some(texture.clone());
+    }
+    textures.retain(|_, (_, used)| pass.saturating_sub(*used) <= IMAGE_TEXTURE_IDLE_PASSES);
+
+    let max_side = ctx
+        .input(|i| i.max_texture_side)
+        .min(MAX_IMAGE_TEXTURE_SIDE) as u32;
+    let dynamic = raster.dynamic();
+    let rgba = if dynamic.width() > max_side || dynamic.height() > max_side {
+        dynamic.thumbnail(max_side, max_side).to_rgba8()
+    } else {
+        dynamic.to_rgba8()
+    };
+    let pixels = egui::ColorImage::from_rgba_unmultiplied(
+        [rgba.width() as usize, rgba.height() as usize],
+        rgba.as_raw(),
+    );
+    let options = match image.scaling() {
+        typst::foundations::Smart::Custom(ImageScaling::Pixelated) => egui::TextureOptions::NEAREST,
+        _ => egui::TextureOptions {
+            mipmap_mode: Some(egui::TextureFilter::Linear),
+            ..egui::TextureOptions::LINEAR
+        },
+    };
+    let texture = ctx.load_texture(format!("typst-image-{key:032x}"), pixels, options);
+    textures.insert(key, (texture.clone(), pass));
+    Some(texture)
+}
+
+/// Paint one placed image: its pixels on the transformed quad, or a
+/// labelled box when the pixels are unavailable or not raster.
+fn paint_image(ui: &egui::Ui, placed: &painter::PositionedImage, offset: egui::Vec2) {
+    let corners = placed.corners.map(|corner| corner + offset);
+    let bounds = egui::Rect::from_points(&corners);
+    if !ui.is_rect_visible(bounds) {
+        return;
+    }
+    if let Some(texture) = image_texture(ui.ctx(), &placed.image) {
+        let mut mesh = egui::Mesh::with_texture(texture.id());
+        let uvs = [
+            egui::pos2(0.0, 0.0),
+            egui::pos2(1.0, 0.0),
+            egui::pos2(1.0, 1.0),
+            egui::pos2(0.0, 1.0),
+        ];
+        for (pos, uv) in corners.into_iter().zip(uvs) {
+            mesh.vertices.push(egui::epaint::Vertex {
+                pos,
+                uv,
+                color: egui::Color32::WHITE,
+            });
+        }
+        mesh.indices.extend([0, 1, 2, 0, 2, 3]);
+        ui.painter().add(egui::Shape::mesh(mesh));
+        return;
+    }
+    let color = ui.visuals().weak_text_color();
+    let painter = ui
+        .painter()
+        .with_clip_rect(ui.clip_rect().intersect(bounds));
+    painter.rect_stroke(
+        bounds,
+        2.0,
+        egui::Stroke::new(1.0_f32, color),
+        egui::StrokeKind::Inside,
+    );
+    let label = match placed.image.alt() {
+        Some(alt) if !alt.trim().is_empty() => format!("image unavailable: {alt}"),
+        _ => "image unavailable".to_owned(),
+    };
+    let galley = painter.layout(
+        label,
+        egui::FontId::proportional(12.0),
+        color,
+        (bounds.width() - 8.0).max(8.0),
+    );
+    let pos = bounds.center() - galley.size() / 2.0;
+    painter.galley(pos, galley, color);
+}
+
 // ── Main render ───────────────────────────────────────────────────────
 
-fn render_typst(ui: &mut egui::Ui, state: &mut TypstState, source: &str, preamble_len: usize) {
+fn render_typst(
+    ui: &mut egui::Ui,
+    state: &mut TypstState,
+    source: &str,
+    preamble_len: usize,
+    files: Option<&FileResolver<'_>>,
+) {
     state.world.set_source(source.to_string());
 
-    let doc = match state.world.compile() {
+    let compiled = match files {
+        Some(files) => state.world.compile_with_files(files),
+        None => state.world.compile(),
+    };
+    let doc = match compiled {
         Ok(doc) => doc,
         Err(diags) => {
             render_typst_errors(ui, source, preamble_len, &diags);
@@ -888,10 +1030,30 @@ fn render_typst(ui: &mut egui::Ui, state: &mut TypstState, source: &str, preambl
             }
         }
 
-        // ── Paint text shapes ────────────────────────────────────
-        for mut shape in shapes {
+        // ── Paint shapes, with images at their place in paint order ──
+        let mut images = text_layout.images.iter().peekable();
+        for (index, mut shape) in shapes.into_iter().enumerate() {
+            while let Some(image) = images.next_if(|image| image.shape_index <= index) {
+                paint_image(ui, image, offset);
+            }
             shape.translate(offset);
             ui.painter().add(shape);
+        }
+        for image in images {
+            paint_image(ui, image, offset);
+        }
+        if let Some(hover_pos) = response.hover_pos() {
+            let frame_pos = hover_pos - offset;
+            let hovered_alt = text_layout.images.iter().rev().find_map(|image| {
+                let bounds = egui::Rect::from_points(&image.corners);
+                bounds
+                    .contains(frame_pos)
+                    .then(|| image.image.alt())
+                    .flatten()
+            });
+            if let Some(alt) = hovered_alt {
+                response.clone().on_hover_text_at_pointer(alt);
+            }
         }
 
         // ── Link interaction ─────────────────────────────────────

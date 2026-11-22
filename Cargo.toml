@@ -27,6 +27,7 @@ include = [
     "assets/fonts/Jersey_15/OFL.txt",
     "assets/fonts/NewComputerModern/NewCMMath-Regular.otf",
     "assets/fonts/NewComputerModern/LICENSE.txt",
+    "assets/typst/unavailable-image.png",
 ]
 
 [dependencies]

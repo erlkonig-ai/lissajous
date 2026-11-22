@@ -18,6 +18,22 @@ pub struct TypstDiag {
     pub span_range: Option<std::ops::Range<usize>>,
 }
 
+/// Bytes a file resolver may return for a path it recognises but cannot
+/// serve right now (not in scope, not yet synced, too large). The painter
+/// draws a labelled box in its place instead of these transparent pixels, so
+/// one missing picture never turns a whole page into a compile error.
+pub const UNAVAILABLE_IMAGE: &[u8] = include_bytes!(concat!(
+    env!("CARGO_MANIFEST_DIR"),
+    "/assets/typst/unavailable-image.png"
+));
+
+/// Caller-supplied bytes for files a document names, for example
+/// `image("files:3fa4…")`. It receives the path relative to the document
+/// root exactly as Typst resolved it (`files:3fa4…`). GORBIE itself reads
+/// nothing from disk or network: without a resolver, and for every path the
+/// resolver declines, the file is simply not found.
+pub type FileResolver<'a> = dyn Fn(&str) -> FileResult<Bytes> + Send + Sync + 'a;
+
 const MATH_FONT: &[u8] = include_bytes!(concat!(
     env!("CARGO_MANIFEST_DIR"),
     "/assets/fonts/NewComputerModern/NewCMMath-Regular.otf"
@@ -87,23 +103,84 @@ impl GorbieWorld {
 
     /// Compile the current source into a paged document.
     pub fn compile(&self) -> Result<PagedDocument, Vec<TypstDiag>> {
-        let result = typst::compile::<PagedDocument>(self);
-        match result.output {
-            Ok(doc) => Ok(doc),
-            Err(errors) => {
-                let src = &self.source;
-                let diags = errors
-                    .iter()
-                    .map(|e| TypstDiag {
-                        severity: e.severity,
-                        message: e.message.to_string(),
-                        hints: e.hints.iter().map(|h| h.to_string()).collect(),
-                        span_range: src.range(e.span),
-                    })
-                    .collect();
-                Err(diags)
-            }
+        self.diagnose(typst::compile::<PagedDocument>(self).output)
+    }
+
+    /// Compile with `files` answering every file the document names.
+    ///
+    /// The resolver is borrowed for this one compilation only, so a caller
+    /// can scope it to whatever data it is rendering from this frame.
+    pub fn compile_with_files(
+        &self,
+        files: &FileResolver<'_>,
+    ) -> Result<PagedDocument, Vec<TypstDiag>> {
+        let world = ResolvingWorld { base: self, files };
+        self.diagnose(typst::compile::<PagedDocument>(&world).output)
+    }
+
+    fn diagnose(
+        &self,
+        output: typst::diag::SourceResult<PagedDocument>,
+    ) -> Result<PagedDocument, Vec<TypstDiag>> {
+        output.map_err(|errors| {
+            errors
+                .iter()
+                .map(|e| TypstDiag {
+                    severity: e.severity,
+                    message: e.message.to_string(),
+                    hints: e.hints.iter().map(|h| h.to_string()).collect(),
+                    span_range: self.source.range(e.span),
+                })
+                .collect()
+        })
+    }
+}
+
+fn not_found(id: FileId) -> typst::diag::FileError {
+    typst::diag::FileError::NotFound(id.vpath().as_rootless_path().into())
+}
+
+/// The base world with one compilation's file resolver beside it.
+struct ResolvingWorld<'a> {
+    base: &'a GorbieWorld,
+    files: &'a FileResolver<'a>,
+}
+
+impl World for ResolvingWorld<'_> {
+    fn library(&self) -> &LazyHash<Library> {
+        self.base.library()
+    }
+
+    fn book(&self) -> &LazyHash<FontBook> {
+        self.base.book()
+    }
+
+    fn main(&self) -> FileId {
+        self.base.main()
+    }
+
+    fn source(&self, id: FileId) -> FileResult<Source> {
+        self.base.source(id)
+    }
+
+    fn file(&self, id: FileId) -> FileResult<Bytes> {
+        // Packages are never resolved; a path that is not valid UTF-8 cannot
+        // name anything a resolver knows.
+        if id.package().is_some() {
+            return Err(not_found(id));
         }
+        match id.vpath().as_rootless_path().to_str() {
+            Some(path) => (self.files)(path),
+            None => Err(not_found(id)),
+        }
+    }
+
+    fn font(&self, index: usize) -> Option<Font> {
+        self.base.font(index)
+    }
+
+    fn today(&self, offset: Option<i64>) -> Option<Datetime> {
+        self.base.today(offset)
     }
 }
 
@@ -131,9 +208,7 @@ impl World for GorbieWorld {
     }
 
     fn file(&self, id: FileId) -> FileResult<Bytes> {
-        Err(typst::diag::FileError::NotFound(
-            id.vpath().as_rootless_path().into(),
-        ))
+        Err(not_found(id))
     }
 
     fn font(&self, index: usize) -> Option<Font> {

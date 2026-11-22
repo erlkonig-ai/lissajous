@@ -167,6 +167,17 @@ impl<'a> CardCtx<'a> {
         crate::widgets::typst_widget::typst_with_preamble(self.ui, source);
     }
 
+    /// [`Self::typst`], with `files` answering the files the source names,
+    /// for example `#image("files:…")`. Nothing else is ever read.
+    #[cfg(feature = "typst")]
+    pub fn typst_with_files(
+        &mut self,
+        source: &str,
+        files: &crate::widgets::typst_render::world::FileResolver<'_>,
+    ) {
+        crate::widgets::typst_widget::typst_with_preamble_and_files(self.ui, source, files);
+    }
+
     /// Render an inline math expression via Typst: `$<expr>$`.
     #[cfg(feature = "typst")]
     pub fn typst_math_inline(&mut self, expr: &str) {

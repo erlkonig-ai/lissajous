@@ -38,6 +38,19 @@ pub struct PositionedLink {
     pub url: String,
 }
 
+/// A placed image: the quad it covers after every enclosing transform, and
+/// where it falls in paint order among the returned shapes.
+#[derive(Clone)]
+pub struct PositionedImage {
+    /// The decoded Typst image (raster pixels, SVG or PDF).
+    pub image: typst::visualize::Image,
+    /// Corners in frame-relative coordinates: the image's top-left,
+    /// top-right, bottom-right and bottom-left, in that order.
+    pub corners: [egui::Pos2; 4],
+    /// Number of shapes painted before this image.
+    pub shape_index: usize,
+}
+
 /// Layout info collected during rendering for selection.
 #[derive(Clone, Default)]
 pub struct TextLayout {
@@ -47,6 +60,8 @@ pub struct TextLayout {
     pub spans: Vec<PositionedSpan>,
     /// Link regions for click/hover handling.
     pub links: Vec<PositionedLink>,
+    /// Images, painted by the caller because they need GPU textures.
+    pub images: Vec<PositionedImage>,
 }
 
 /// Render a Typst frame into egui shapes plus text layout info for selection.
@@ -192,7 +207,20 @@ fn render_frame_inner(
                     });
                 }
             }
-            FrameItem::Image(..) | FrameItem::Tag(..) => {}
+            FrameItem::Image(image, size, _) => {
+                let (w, h) = (size.x.to_pt() as f32, size.y.to_pt() as f32);
+                text_layout.images.push(PositionedImage {
+                    image: image.clone(),
+                    corners: [
+                        local.transform_point(0.0, 0.0),
+                        local.transform_point(w, 0.0),
+                        local.transform_point(w, h),
+                        local.transform_point(0.0, h),
+                    ],
+                    shape_index: shapes.len(),
+                });
+            }
+            FrameItem::Tag(..) => {}
         }
     }
 }

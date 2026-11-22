@@ -4,6 +4,14 @@ All notable changes to this project will be documented in this file.
 
 ## Unreleased
 
+- Typst images. `CardCtx::typst_with_files` (and
+  `typst_with_preamble_and_files`) compile with a caller-supplied
+  `FileResolver` scoped to that one compilation; GORBIE still reads no file on
+  its own. Raster images (PNG, JPEG, GIF, WebP) paint at their Typst layout
+  size and transform, in paint order, with the alt text on hover; textures
+  are cached by image hash and capped at 2048 px a side. A resolver returns
+  `UNAVAILABLE_IMAGE` for a known but unavailable picture; it, SVG and PDF
+  images are drawn as a box with the alt text.
 - Compact native pile instrument: configured path and measured bytes inside one
   square-cornered 28-point rail, with a measured hatched unread tail and
   one-point hatch-coloured divider; no ready/replay label or refresh button.
